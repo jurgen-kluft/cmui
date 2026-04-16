@@ -1,0 +1,37 @@
+#ignore all files
+*
+!*/
+
+target/
+tags/
+
+#except the following files
+!.gitignore
+!.clang-format
+!*.cpp
+!*.hpp
+!*.c
+!*.h
+!*.inl
+
+!*.zig
+
+!*.go
+
+!*.cs
+!*.csproj
+!*.resx
+
+!*.hlsl
+!*.fragment
+
+!*.md
+!*.jpg
+!*.txt
+!*.html
+
+!*.ini
+!*.bat
+
+#except do ignore the following files
+CMakeLists.txt
