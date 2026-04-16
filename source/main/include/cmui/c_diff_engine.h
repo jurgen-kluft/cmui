@@ -28,7 +28,7 @@ namespace ncore
         // block data (image width * DIFF_BLOCK_H * DIFF_BPP).
         void diff_block_init(diff_block_t& block, u8* payload_buffer, i32 buffer_size);
 
-        struct diff_ctx_t
+        struct diff_engine_t
         {
             u32       width;           // width of the framebuffer in pixels
             u32       height;          // height of the framebuffer in pixels
@@ -41,8 +41,8 @@ namespace ncore
             u32       current_row;     // current block row being processed
         };
 
-        void diff_engine_init(diff_ctx_t& ctx, u32 width, u32 height, const u8* prev_fb, const u8* curr_fb);
-        bool diff_engine_compute(diff_ctx_t& ctx, diff_block_t& block);
+        void diff_engine_init(diff_engine_t& ctx, u32 width, u32 height, const u8* prev_fb, const u8* curr_fb);
+        bool diff_engine_compute(diff_engine_t& ctx, diff_block_t& block);
 
     }  // namespace nmui
 }  // namespace ncore

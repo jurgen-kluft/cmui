@@ -48,7 +48,7 @@ namespace ncore
             block.payload     = (buffer_size > 0) ? payload_buffer : nullptr;
         }
 
-        void diff_engine_init(diff_ctx_t& ctx, u32 width, u32 height, const u8* prev_fb, const u8* curr_fb)
+        void diff_engine_init(diff_engine_t& ctx, u32 width, u32 height, const u8* prev_fb, const u8* curr_fb)
         {
             ctx.width          = width;
             ctx.height         = height;
@@ -65,7 +65,7 @@ namespace ncore
         // If a span is found, fills in the block info and returns true, otherwise it will continue on to
         // the next row until all rows have been processed, at which point it will return false and the
         // state will be set to 3 (done).
-        bool diff_engine_compute(diff_ctx_t& ctx, diff_block_t& block)
+        bool diff_engine_compute(diff_engine_t& ctx, diff_block_t& block)
         {
             if (ctx.state == 3)
                 return false;
