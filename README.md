@@ -1,5 +1,7 @@
 # cmui
 
+State: WIP
+
 Remote UI Server for ESP32-S3 microcontrollers, running ImGui on Raylib. The server uses a block based diff engine to efficiently update the UI on the client side, sending only the changed blocks of the framebuffer. Communication between the server and clients is done using a simple TCP protocol, allowing for low latency and high throughput.
 
 ## Features
