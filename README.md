@@ -6,16 +6,16 @@ Remote UI Server for ESP32-S3 microcontrollers, running ImGui on Raylib. The ser
 
 ## Features
 
-- TCP based communication (simple) protocol for low latency and high throughput
-- ESP32-S3 microcontroller clients
+- TCP based communication (ctx, simple) protocol for low latency and high throughput
+- Clients are ESP32 based devices
 - Block based frame-buffer diff engine for efficiently updating the UI display on the client
+
+## 2D rendering with cgx2
+
+The server uses the cgx2 library for 2D rendering, which provides a simple and efficient way to draw graphics on a memory based framebuffer. The library supports basic drawing operations such as lines, rectangles, circles, sprites and text rendering.
 
 ## Framebuffer Diff Engine
 
 The diff engine divides the framebuffer into blocks of 16x16 pixels and compares the current framebuffer with the previous one to identify which blocks have changed. Only the changed blocks are sent to the client, reducing bandwidth usage and improving performance.
 
 There is an optimization on a row where if a block is detected as changed, the engine checks if the next blocks in the same row are also changed. If they are, all consecutive changed blocks are sent together in a single update, further reducing the number of updates needed.
-
-## ImGui on Raylib
-
-The server is able to run produce multiple UI's for different clients. The UI is built using ImGui and rendered using Raylib. The server can handle multiple clients simultaneously, allowing for a collaborative UI experience.

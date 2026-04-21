@@ -20,3 +20,8 @@
    b. Registers, Updates and Removes UI instances
 
 
+## Future Optimizations
+
+- Block Cache (Server Side decides which blocks to cache and assumes they are cached on the client)
+  - identify blocks by SHA1 hash, 20 bytes
+  - instruct device to cache certain blocks, and only send block hashes
