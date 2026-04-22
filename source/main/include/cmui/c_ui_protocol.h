@@ -43,24 +43,24 @@ namespace ncore
         {
             u32 m_message_id;     // the message id
             u32 m_screen_id;      // the screen this span belongs to, 0 for the main screen, 1..n for additional screens
-            u8  m_by;             // 0..255 (row)
+            u8  m_by_start;       // 0..255 (row start)
+            u8  m_by_count;       // 1..255 (row count)
             u8  m_bx_start;       // 0..255 (column start)
             u8  m_bx_count;       // 1..255 (column count)
-            u8  m_reserved;       // reserved for future use, set to 0
             u32 m_hash_data_len;  // N * 20 bytes, where N is the number of blocks in this span
-            // u8  m_hash_data;
+            // u8 m_hash_data;    // the hash data for this span, which is an array of N 20-byte hashes (SHA-1)
         };
 
         struct block_span_t
         {
             u32 m_message_id;  // the message id
-            u32 m_screen_id;   // the screen this span belongs to, 0 for the main screen, 1..n for additional screens
-            u8  m_by;          // 0..255 (row)
+            u32 m_page_id;     // the page this span belongs to, 0 for the main page, 1..n for additional pages
+            u8  m_by_start;    // 0..255 (row start)
+            u8  m_by_count;    // 1..255 (row count)
             u8  m_bx_start;    // 0..255 (column start)
             u8  m_bx_count;    // 1..255 (column count)
-            u8  m_reserved;    // reserved for future use, set to 0
             u32 m_data_len;    // bytes (optional, but recommended)
-            // u8  rgb565[];
+            // u8 m_data[];    // the pixel data for this block span
         };
 
     }  // namespace nmui
