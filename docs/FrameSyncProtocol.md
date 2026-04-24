@@ -4,8 +4,8 @@
 
 This protocol is client-driven for rendering.
 
-1. Client requests a frame render with `FRAME_BEGIN(frame_index)`.
-2. Server renders that page for `frame_index`, compares against `(frame_index - 1)`, then returns:
+1. Client requests a frame render with `FRAME_BEGIN(frame_index, previous_frame_index)`.
+2. Server renders that page for `frame_index`, compares against `previous_frame_index`, then returns:
    1. `FRAME_BEGIN(frame_index, root_hash, ...)`
    2. Zero or more row payloads (`ROW_BEGIN` + `ROW_TILES`)
    3. `FRAME_END(frame_index, ...)`
