@@ -7,7 +7,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/jurgen-kluft/cmui/docs/tools/srlen"
+	fe "github.com/jurgen-kluft/cmui/docs/tools/FrameEncoder"
 )
 
 const (
@@ -116,9 +116,9 @@ func main() {
 	// ------------------------------------------------------------------
 	// Build logical symbol streams
 	// ------------------------------------------------------------------
-	lineStream := srlen.NewBitStreamWriter((h*1 + 7) / 8)              // pre-allocate output buffer
-	runStream := srlen.NewBitStreamWriter((pixelCount*1 + 7) / 8)      // pre-allocate output buffer
-	selectorStream := srlen.NewBitStreamWriter((pixelCount*2 + 7) / 8) // pre-allocate output buffer
+	lineStream := fe.NewBitStreamWriter((h*1 + 7) / 8)              // pre-allocate output buffer
+	runStream := fe.NewBitStreamWriter((pixelCount*1 + 7) / 8)      // pre-allocate output buffer
+	selectorStream := fe.NewBitStreamWriter((pixelCount*2 + 7) / 8) // pre-allocate output buffer
 
 	p0NumPixels := 0
 	for _, v := range pal0 {
@@ -135,9 +135,9 @@ func main() {
 		p2NumPixels += hist[v]
 	}
 
-	p0Stream := srlen.NewBitStreamWriter((p0NumPixels*2 + 7) / 8) // pre-allocate output buffer
-	p1Stream := srlen.NewBitStreamWriter((p1NumPixels*4 + 7) / 8) // pre-allocate output buffer
-	p2Stream := srlen.NewBitStreamWriter((p2NumPixels*8 + 7) / 8) // pre-allocate output buffer
+	p0Stream := fe.NewBitStreamWriter((p0NumPixels*2 + 7) / 8) // pre-allocate output buffer
+	p1Stream := fe.NewBitStreamWriter((p1NumPixels*4 + 7) / 8) // pre-allocate output buffer
+	p2Stream := fe.NewBitStreamWriter((p2NumPixels*8 + 7) / 8) // pre-allocate output buffer
 	rawStream := []uint16{}
 
 	for y := 0; y < h; y++ {
@@ -204,19 +204,19 @@ func main() {
 	// ------------------------------------------------------------------
 	// ACTUAL encoding using SRLEN + BitStream
 	// ------------------------------------------------------------------
-	lineEncoded := srlen.NewBitStreamWriter((lineStreamNumBits + 7) / 8)    // pre-allocate output buffer
-	runEncoded := srlen.NewBitStreamWriter((runStreamNumBits + 7) / 8)      // pre-allocate output buffer
-	selEncoded := srlen.NewBitStreamWriter((selectorStreamNumBits + 7) / 8) // pre-allocate output buffer
-	p0Encoded := srlen.NewBitStreamWriter((p0StreamNumBits + 7) / 8)        // pre-allocate output buffer
-	p1Encoded := srlen.NewBitStreamWriter((p1StreamNumBits + 7) / 8)        // pre-allocate output buffer
-	p2Encoded := srlen.NewBitStreamWriter((p2StreamNumBits + 7) / 8)        // pre-allocate output buffer
+	lineEncoded := fe.NewBitStreamWriter((lineStreamNumBits + 7) / 8)    // pre-allocate output buffer
+	runEncoded := fe.NewBitStreamWriter((runStreamNumBits + 7) / 8)      // pre-allocate output buffer
+	selEncoded := fe.NewBitStreamWriter((selectorStreamNumBits + 7) / 8) // pre-allocate output buffer
+	p0Encoded := fe.NewBitStreamWriter((p0StreamNumBits + 7) / 8)        // pre-allocate output buffer
+	p1Encoded := fe.NewBitStreamWriter((p1StreamNumBits + 7) / 8)        // pre-allocate output buffer
+	p2Encoded := fe.NewBitStreamWriter((p2StreamNumBits + 7) / 8)        // pre-allocate output buffer
 
-	srlen.Encode(lineStream.Reader(), 1, 2, lineEncoded)
-	srlen.Encode(runStream.Reader(), 1, 2, runEncoded)
-	srlen.Encode(selectorStream.Reader(), 2, 4, selEncoded)
-	srlen.Encode(p0Stream.Reader(), 2, 4, p0Encoded)
-	srlen.Encode(p1Stream.Reader(), 4, 16, p1Encoded)
-	srlen.Encode(p2Stream.Reader(), 8, 256, p2Encoded)
+	fe.Encode(lineStream.Reader(), 1, 2, lineEncoded)
+	fe.Encode(runStream.Reader(), 1, 2, runEncoded)
+	fe.Encode(selectorStream.Reader(), 2, 4, selEncoded)
+	fe.Encode(p0Stream.Reader(), 2, 4, p0Encoded)
+	fe.Encode(p1Stream.Reader(), 4, 16, p1Encoded)
+	fe.Encode(p2Stream.Reader(), 8, 256, p2Encoded)
 
 	lineEncodedNumBits := lineEncoded.Finalize()
 	runEncodedNumBits := runEncoded.Finalize()
