@@ -11,12 +11,12 @@ The detailed wire protocol is specified in [docs/FrameSyncProtocol.md](docs/Fram
 1. Client requests rendering by sending `FRAME_BEGIN(page_id, frame_index)`.
 2. Server renders `page_id` at `frame_index`, compares against `frame_index - 1`, and returns:
    1. `FRAME_BEGIN` response with frame metadata and root hash
-   2. Per-row payloads (`ROW_BEGIN` + `ROW_TILES`)
+   2. Specific data payloads
    3. `FRAME_END` (server end-of-frame marker)
-3. Client verifies row hashes and root hash, then responds with `FRAME_END` acknowledgment:
+3. Client verifies hashes and root hash, then responds with `FRAME_END` acknowledgment:
    1. `status=OK`, or
-   2. `status=ROW_BITMAP` where bit=0 indicates mismatching row hash.
-4. On `ROW_BITMAP`, server retransmits only failed rows and sends another `FRAME_END` for the same frame index.
+   2. `status=INVALID` where bit=0 indicates mismatching hash.
+4. On `INVALID`, server retransmits only failed data and sends another `FRAME_END` for the same frame index.
 5. Server repeats until client sends `OK` or retry/time budget is exceeded.
 6. On `OK`, server waits for the next client message.
 
@@ -26,7 +26,7 @@ The detailed wire protocol is specified in [docs/FrameSyncProtocol.md](docs/Fram
 - No authentication or encryption (trusted home network assumption)
 - TCP transport (in-order byte stream)
 - Little-endian encoding
-- Client display resolution is below 2048 x 2048 (fits in 7 bits for tile (16x16) addressing)
+- Client display resolution is always below 2048 x 2048
 - Client does not run UI logic; it renders server-provided frame data
 - Client may send input events to server, which are applied to session/UI state for future renders
 - Server is authoritative for rendering and verification; client is a passive renderer and verifier
@@ -42,7 +42,7 @@ The detailed wire protocol is specified in [docs/FrameSyncProtocol.md](docs/Fram
 3. Connection thread (single owner of session state):
    1. Handle protocol I/O.
    2. Render requested frames.
-   3. Diff against previous frame index.
+   3. Generate 'compressed' frame data and send to client.
    4. Run row-repair loop until frame acknowledged.
 
 This keeps per-client UI/render/protocol state owned by a single thread.
@@ -57,8 +57,8 @@ This keeps per-client UI/render/protocol state owned by a single thread.
 3. Frame request path:
    1. Client sends `FRAME_BEGIN` request.
    2. Server returns frame payload and `FRAME_END`.
-   3. Client returns `FRAME_END` acknowledgment (`OK` or row bitmap).
-   4. Server retransmits failed rows until `OK`.
+   3. Client returns `FRAME_END` acknowledgment (`OK` or `INVALID`).
+   4. Server retransmits failed data until `OK`.
 4. Event path:
    1. Client sends `EVENTS_BEGIN`.
    2. Client sends one or more `EVENT_INFO` messages.
@@ -67,13 +67,12 @@ This keeps per-client UI/render/protocol state owned by a single thread.
 
 ## Verification Model
 
-- Server sends tile hashes with tile payloads.
-- Client does not hash tile pixel bytes directly.
-- Client computes row hashes from received tile hashes.
-- Client computes root hash from row hashes.
+- Server sends hashes with payloads.
+- Client computes hashes for data to verify integrity.
+- Client computes root hash from data hashes.
 - Client acknowledges frame with `FRAME_END`:
-  - `OK` when row hashes and root hash match.
-  - `ROW_BITMAP` when one or more rows mismatch.
+  - `OK` when hashes and root hash match.
+  - `INVALID` when one or more hashes mismatch.
 
 ## Reliability and Recovery
 
@@ -102,7 +101,7 @@ Per-session state includes:
 - Previous acknowledged frame index
 - Client display metadata
 - Staging/display frame data for verification/commit
-- Row hash and tile hash tables for current frame verification
+- Hashes for frame data verification
 
 ## Reference
 
