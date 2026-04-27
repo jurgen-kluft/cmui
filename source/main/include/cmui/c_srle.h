@@ -5,6 +5,8 @@
 #    pragma once
 #endif
 
+#include "cmui/c_bitstream.h"
+
 namespace ncore
 {
     namespace nrle
@@ -13,6 +15,13 @@ namespace ncore
         {
             u8* data;
             u32 size;
+        };
+
+        struct header_t
+        {
+            u32 decoded_size_in_bits;  // size of the decoded bitstream in bits
+            u8  symbol_bits;           // number of bits used to encode each symbol (1, 2, 4 or 8)
+            u8  run_bits[];            // per symbol run-bits (size = 2^symbol_bits)
         };
 
         // ---- Encoder / decoder ----
@@ -26,7 +35,7 @@ namespace ncore
         // returns the number of bits written to the output bitstream, or a negative value on error
         // symbol_bits can be 1, 2, 4 or 8, and determines the size of each symbol in bits
         // note: caller is responsible for ensuring that the output buffer is large enough to hold
-        //       the header block + encoded data 
+        //       the header block + encoded data
         // note: minimum size for the output buffer is 8 KiB!
         s32 encode_bits(const u8* data, u32 data_bits, u8 symbol_bits, out_t& out);
 
@@ -39,27 +48,45 @@ namespace ncore
         // returns the number of bits read from the input bitstream, or a negative value on error
         // note: caller is responsible for ensuring that the output buffer is large enough to hold
         //       the decoded data (see decoded_size() to obtain the size of the decoded bitstream)
-        s32 decode_bits(const u8* bitstream, out_t& out);
+        s32 decode_all_bits(const u8* bitstream, out_t& out);
 
-        // ---- reader ----
-        // The reader is a utility for reading bits from the encoded bitstream during decoding.
-        // It maintains the current position in the bitstream and provides functions for reading
-        // bits and symbols.
-        struct symbol_t;
-        struct reader_t
+        // initializes a bitstream reader for the encoded bitstream, returns 0 on success or a
+        // negative value on error
+        struct header_t;
+        struct decoder_t
         {
-            const u8*       m_data;            // the bitstream data
-            const symbol_t* m_symbols;         // array of symbols (points in bitstream) (size = m_num_symbols)
-            u32             m_num_symbols;     // number of symbols (also tells us symbol size in bits)
-            u32             m_bit_pos;         // current position in bits
-            u32             m_remaining_bits;  // number of bits remaining in stream
-            u32             m_reserved;        // reserved for future use, should be set to 0
+            nbitstream::reader_t m_bitstream;
+            header_t*            m_header;
+            s32                  m_symbol;  // current symbol being decoded
+            u32                  m_rl;      // remaining run length for the current symbol
         };
 
-        void reader_init(reader_t& r, const u8* bitstream);
+        s32        decoder_init(decoder_t& decoder, const u8* bitstream);
+        inline s32 decode(decoder_t& decoder)
+        {
+            if (decoder.m_rl  ==  0)
+            {
+                if (nbitstream::is_end(&decoder.m_bitstream, decoder.m_header->symbol_bits))
+                    return -1;  // end of bitstream
 
-        // returns the bits read as a signed value, or a negative value on error
-        s32 read_bits(reader_t& r, u32 num_bits);
+                decoder.m_symbol = nbitstream::read_bits(&decoder.m_bitstream, decoder.m_header->symbol_bits);
+                const u8 rb = decoder.m_header->run_bits[decoder.m_symbol];
+                if (rb > 0)
+                {
+                    decoder.m_rl = nbitstream::read_bits(&decoder.m_bitstream, rb) + 1;
+                }
+                else
+                {
+                    decoder.m_rl = 1;  // raw mode, just one symbol
+                }
+
+                --decoder.m_rl;
+                return decoder.m_symbol;
+            } 
+
+            --decoder.m_rl;
+            return decoder.m_symbol;
+        }
 
     }  // namespace nrle
 }  // namespace ncore

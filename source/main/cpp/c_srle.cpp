@@ -9,12 +9,6 @@ namespace ncore
 {
     namespace nrle
     {
-        struct symbol_t
-        {
-            u8 symbol;    // symbol size can be 1, 2, 4 or 8 bits
-            u8 run_bits;  // number of bits used to encode the run length for this symbol (0 for raw mode)
-        };
-
         // bitstream format:
         //  - u32      decoded_size_in_bits;  // size of the decoded bitstream in bits
         //  - u8       symbol_bits;           // number of bits used to encode each symbol (1, 2, 4 or 8)
@@ -26,18 +20,11 @@ namespace ncore
             u32 sizeInBitsPerRb[6];  // for each rb, size in bits, encoding with run-bits = (1 << rb)
         };
 
-        struct header_t
-        {
-            u32 decoded_size_in_bits;  // size of the decoded bitstream in bits
-            u8  symbol_bits;           // number of bits used to encode each symbol (1, 2, 4 or 8)
-            u8  run_bits[];            // per symbol run-bits (size = 2^symbol_bits)
-        };
-
         s32 encode_bits(const u8* data, u32 data_bits, u8 symbol_bits, out_t& out)
         {
             // output buffer is too small, minimum size is 8 KiB
             if (out.size < 8192)
-                return -1;  
+                return -1;
 
             // only allowed symbol_bits; 1, 2, 4 or 8
             if (symbol_bits != 1 && symbol_bits != 2 && symbol_bits != 4 && symbol_bits != 8)
@@ -149,6 +136,74 @@ namespace ncore
 
             const u32 total_bits = nbitstream::finalize(&bitwriter);
             return (s32)(hdr_size * 8 + total_bits);
+        }
+
+        s32 decoded_size(const u8* bitstream)
+        {
+            const header_t* hdr = (const header_t*)bitstream;
+            return (s32)hdr->decoded_size_in_bits;
+        }
+
+        s32 symbol_run_bits(const u8* bitstream, u8 symbol)
+        {
+            const header_t* hdr = (const header_t*)bitstream;
+            if (symbol >= (1U << hdr->symbol_bits))
+                return -1;  // invalid symbol
+            return (s32)hdr->run_bits[symbol];
+        }
+
+        s32 decode_bits(const u8* bitstream, out_t& out)
+        {
+            const header_t* hdr  = (const header_t*)bitstream;
+            const u8*       data = bitstream + sizeof(header_t) + (sizeof(u8) * (1U << hdr->symbol_bits));
+
+            nbitstream::reader_t bitreader;
+            nbitstream::init(&bitreader, data, hdr->decoded_size_in_bits);
+
+            nbitstream::writer_t bitwriter;
+            nbitstream::init(&bitwriter, out.data, out.size * 8);
+
+            while (nbitstream::is_end(&bitreader, hdr->symbol_bits) == false)
+            {
+                const u32 symbol = nbitstream::read_bits_unguarded(&bitreader, hdr->symbol_bits);
+                if (symbol >= (1U << hdr->symbol_bits))
+                    return -1;  // invalid symbol
+
+                const u8 rb = hdr->run_bits[symbol];
+                if (rb == 0)
+                {
+                    // raw mode, just write one symbol
+                    if (nbitstream::write_bits(&bitwriter, symbol, hdr->symbol_bits) < 0)
+                        return -1;  // error writing bits
+                }
+                else
+                {
+                    const u32 chunk = nbitstream::read_bits_unguarded(&bitreader, rb) + 1;
+                    for (u32 i = 0; i < chunk; ++i)
+                    {
+                        if (nbitstream::write_bits(&bitwriter, symbol, hdr->symbol_bits) < 0)
+                            return -1;  // error writing bits
+                    }
+                }
+            }
+
+            const u32 total_bits = nbitstream::finalize(&bitwriter);
+
+            return (s32)total_bits;
+        }
+
+        s32 decoder_init(decoder_t& decoder, const u8* bitstream)
+        {
+            const header_t* hdr = (const header_t*)bitstream;
+            if (hdr->symbol_bits != 1 && hdr->symbol_bits != 2 && hdr->symbol_bits != 4 && hdr->symbol_bits != 8)
+                return -1;  // invalid symbol_bits
+
+            decoder.m_header = (header_t*)bitstream;
+            const u32 header_size = sizeof(header_t) + (sizeof(u8) * (1U << hdr->symbol_bits));
+            nbitstream::init(&decoder.m_bitstream, bitstream + header_size, (decoder.m_header->decoded_size_in_bits));
+            decoder.m_symbol = 0;
+            decoder.m_rl     = 0;
+            return 0;
         }
 
     }  // namespace nrle
