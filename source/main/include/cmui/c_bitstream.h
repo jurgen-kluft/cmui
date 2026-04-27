@@ -33,7 +33,7 @@ namespace ncore
         // Constraints:
         // - maximum symbol size is 30 bits
         // - maximum bitstream size is 2^32 bits (4 GiB)
-        // - write_bits() and read_bits() return -1 on error, 
+        // - write_bits() and read_bits() return -1 on error,
         //   otherwise 0 for write_bits() and the value for read_bits()
 
         //
@@ -52,6 +52,55 @@ namespace ncore
         s32  peek_bits(reader_t* bs, u8 num_bits);
         s8   skip_bits(reader_t* bs, u8 num_bits);
         bool is_end(const reader_t* bs, u8 sizeof_symbol_bits);
+
+        // read bits function that requires you to do the validation. It is faster but
+        // should be used with care.
+        // note: this function is usefull if you know the exact amount of 'read_bits' you
+        //       need to call and want to avoid the overhead of validation in read_bits().
+        u32 read_bits_unguarded(reader_t* bs, u8 num_bits)
+        {
+            while (bs->accu_num_bits < 32 && (bs->pos * 8) < bs->num_bits)
+            {
+                bs->accu_register |= u64(bs->buf[bs->pos]) << bs->accu_num_bits;
+                bs->accu_num_bits += 8;
+                bs->pos++;
+            }
+
+            const u32 mask = (1u << num_bits) - 1u;
+            const u32 v    = (u32)(bs->accu_register & mask);
+            bs->accu_register >>= num_bits;
+            bs->accu_num_bits -= num_bits;
+            bs->read_bits += num_bits;
+            return v;
+        }
+
+        u32 peek_bits_unguarded(reader_t* bs, u8 num_bits)
+        {
+            while (bs->accu_num_bits < 32 && (bs->pos * 8) < bs->num_bits)
+            {
+                bs->accu_register |= u64(bs->buf[bs->pos]) << bs->accu_num_bits;
+                bs->accu_num_bits += 8;
+                bs->pos++;
+            }
+
+            const u32 mask = (1u << num_bits) - 1u;
+            return (u32)(bs->accu_register & mask);
+        }
+
+        void skip_bits_unguarded(reader_t* bs, u8 num_bits)
+        {
+            while (bs->accu_num_bits < 32 && (bs->pos * 8) < bs->num_bits)
+            {
+                bs->accu_register |= u64(bs->buf[bs->pos]) << bs->accu_num_bits;
+                bs->accu_num_bits += 8;
+                bs->pos++;
+            }
+
+            bs->accu_register >>= num_bits;
+            bs->accu_num_bits -= num_bits;
+            bs->read_bits += num_bits;
+        }
+
     }  // namespace nbitstream
 }  // namespace ncore
 

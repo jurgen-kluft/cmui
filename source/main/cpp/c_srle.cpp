@@ -1,218 +1,128 @@
 #include "ccore/c_target.h"
+#include "ccore/c_math.h"
 #include "ccore/c_memory.h"
 
 #include "cmui/c_srle.h"
+#include "cmui/c_bitstream.h"
 
 namespace ncore
 {
     namespace nrle
     {
-        // ------------------------------------------------------------
-        // internal bit helpers
-        // ------------------------------------------------------------
-        static inline u8 read_bit(const u8* data, u32& bit_pos)
+        struct symbol_t
         {
-            u8 bit = (data[bit_pos >> 3] >> (bit_pos & 7)) & 1;
-            bit_pos++;
-            return bit;
-        }
+            u8 symbol;    // symbol size can be 1, 2, 4 or 8 bits
+            u8 run_bits;  // number of bits used to encode the run length for this symbol (0 for raw mode)
+        };
 
-        static inline void write_bit(u8* data, u32& bit_pos, u32 bit)
+        // bitstream format:
+        //  - u32      decoded_size_in_bits;  // size of the decoded bitstream in bits
+        //  - u8       symbol_bits;           // number of bits used to encode each symbol (1, 2, 4 or 8)
+        //  - u8       run_bits[];            // array of run-bits per symbols (size = 2^symbol_bits)
+        //  - u8       encoded_data[];        // the encoded bitstream data
+
+        struct symbol_info_t
         {
-            if (bit)
-                data[bit_pos >> 3] |= (1u << (bit_pos & 7));
-            bit_pos++;
-        }
+            u32 sizeInBitsPerRb[6];  // for each rb, size in bits, encoding with run-bits = (1 << rb)
+        };
 
-        static mode_t choose_mode(u32 bit_count, u32 ones, u32 run_bits)
+        struct header_t
         {
-            const u64 rhs = (u64)bit_count * run_bits;
+            u32 decoded_size_in_bits;  // size of the decoded bitstream in bits
+            u8  symbol_bits;           // number of bits used to encode each symbol (1, 2, 4 or 8)
+            u8  run_bits[];            // per symbol run-bits (size = 2^symbol_bits)
+        };
 
-            if ((u64)ones * (run_bits + 1) >= rhs)
-                return MODE_ONES;
-
-            const u32 zeros = bit_count - ones;
-            if ((u64)zeros * (run_bits + 1) >= rhs)
-                return MODE_ZEROS;
-
-            return MODE_RAW_BITS;
-        }
-
-        // ------------------------------------------------------------
-        // Encoder
-        // ------------------------------------------------------------
-        u32 encode_bits(const u8* bits, u32 bit_count, u32 run_bits, out_t& out, header_t& header)
+        s32 encode_bits(const u8* data, u32 data_bits, u8 symbol_bits, out_t& out)
         {
-            u32 ones = 0;
-            for (u32 i = 0; i < bit_count; ++i)
-                ones += (bits[i] != 0);
+            // First figure out the optimal 'run_bits' for each symbol, which determines how the run lengths are encoded in the bitstream.
+            symbol_info_t* symbol_info = (symbol_info_t*)out.data;
 
-            header.mode     = (u8)choose_mode(bit_count, ones, run_bits);
-            header.run_bits = (u8)run_bits;
-
-            u32 bit_pos = 0;
-
-            if (header.mode == MODE_RAW_BITS)
+            nbitstream::reader_t bitreader;
+            nbitstream::init(&bitreader, data, data_bits);
+            i32 num_reads = data_bits / symbol_bits;
+            while (num_reads > 0)
             {
-                for (u32 i = 0; i < bit_count; ++i)
-                    write_bit(out.data, bit_pos, bits[i]);
-                out.size = (bit_pos + 7) >> 3;
-                return bit_pos;
-            }
-
-            const u32 rle_symbol = (header.mode == MODE_ONES) ? 1 : 0;
-            const u32 max_run    = (1u << run_bits) - 1;
-
-            for (u32 i = 0; i < bit_count;)
-            {
-                if (bits[i] != rle_symbol)
+                const s8 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
+                u32      run    = num_reads;
+                --num_reads;
+                while (num_reads > 0)
                 {
-                    write_bit(out.data, bit_pos, bits[i]);
-                    i++;
-                    continue;
+                    const s8 next_symbol = nbitstream::peek_bits_unguarded(&bitreader, symbol_bits);
+                    if (next_symbol != symbol)
+                        break;
+                    nbitstream::skip_bits_unguarded(&bitreader, symbol_bits);
+                    --num_reads;
                 }
+                run = run - num_reads;
 
-                u32 run = 0;
-                while (i < bit_count && bits[i] == rle_symbol && run < max_run)
+                // here for each rb we calculate the size of the encoding and add to
+                // the total size for that rb
+                for (u32 rb = 0; rb <= 5; ++rb)
                 {
-                    run++;
-                    i++;
+                    u32 r = run;
+                    while (r >= (1U << rb))
+                    {
+                        symbol_info[symbol].sizeInBitsPerRb[rb] += symbol_bits + rb;
+                        r -= (1U << rb);
+                    }
                 }
-
-                write_bit(out.data, bit_pos, rle_symbol);
-                for (u32 b = 0; b < run_bits; ++b)
-                    write_bit(out.data, bit_pos, (run >> b) & 1);
             }
 
-            out.size = (bit_pos + 7) >> 3;
-            return bit_pos;
-        }
+            // Per symbol what is the optimal rb to use
+            header_t* hdr             = (header_t*)out.data;
+            hdr->decoded_size_in_bits = data_bits;
+            hdr->symbol_bits          = symbol_bits;
 
-        // ------------------------------------------------------------
-        // Decoder (bulk)
-        // ------------------------------------------------------------
-        void decode_bits(const u8* in_bits, u32 in_bit_cnt, u8* out_bits, u32 out_bit_cnt, const header_t& header)
-        {
-            u32 in_pos = 0;
-
-            if (header.mode == MODE_RAW_BITS)
+            for (u32 symbol = 0; symbol < (1U << symbol_bits); ++symbol)
             {
-                for (u32 i = 0; i < out_bit_cnt; ++i)
-                    out_bits[i] = read_bit(in_bits, in_pos);
-                return;
-            }
-
-            const u32 rle_symbol = (header.mode == MODE_ONES) ? 1 : 0;
-
-            for (u32 i = 0; i < out_bit_cnt;)
-            {
-                u8 bit = read_bit(in_bits, in_pos);
-                if (bit != rle_symbol)
+                u32 best_rb = 0;
+                for (u32 rb = 1; rb <= 5; ++rb)
                 {
-                    out_bits[i++] = bit;
-                    continue;
+                    if (symbol_info[symbol].sizeInBitsPerRb[rb] < symbol_info[symbol].sizeInBitsPerRb[best_rb])
+                        best_rb = rb;
                 }
-
-                u32 run = 0;
-                for (u32 b = 0; b < header.run_bits; ++b)
-                    run |= read_bit(in_bits, in_pos) << b;
-
-                for (u32 k = 0; k < run && i < out_bit_cnt; ++k)
-                    out_bits[i++] = rle_symbol;
+                hdr->run_bits[symbol] = (u8)best_rb;
             }
-        }
 
-        // ------------------------------------------------------------
-        // RAW reader
-        // ------------------------------------------------------------
-        void mode_raw_reader_init(bit_reader_t& r, const u8* data, u32 decoded_bit_count)
-        {
-            r.data           = data;
-            r.bit_pos        = 0;
-            r.run_bits       = 0;
-            r.pending        = 0;
-            r.remaining_bits = decoded_bit_count;
-        }
+            const u32 hdr_size = sizeof(header_t) + (sizeof(u8) * (1U << symbol_bits));
 
-        s8 mode_raw_read_bit(bit_reader_t& r)
-        {
-            if (r.remaining_bits == 0)
-                return -1;
+            // Now we have the optimal rb for each symbol, we can encode the bitstream accordingly.
+            nbitstream::writer_t bitwriter;
+            nbitstream::init(&bitwriter, out.data + hdr_size, (out.size - hdr_size) * 8);
+            nbitstream::init(&bitreader, data, data_bits);
 
-            r.remaining_bits--;
-            return read_bit(r.data, r.bit_pos);
-        }
-
-        // ------------------------------------------------------------
-        // RLE_ZEROS reader
-        // ------------------------------------------------------------
-        void mode_zeros_reader_init(bit_reader_t& r, const u8* data, u32 run_bits, u32 decoded_bit_count)
-        {
-            r.data           = data;
-            r.bit_pos        = 0;
-            r.run_bits       = run_bits;
-            r.pending        = 0;
-            r.remaining_bits = decoded_bit_count;
-        }
-
-        s8 mode_zeros_read_bit(bit_reader_t& r)
-        {
-            if (r.remaining_bits == 0)
-                return -1;
-            r.remaining_bits--;
-
-            if (r.pending > 0)
+            num_reads = data_bits / symbol_bits;
+            while (num_reads > 0)
             {
-                r.pending--;
-                return 0;
+                const s8 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
+                u32      run    = num_reads;
+                --num_reads;
+                while (num_reads > 0)
+                {
+                    const s8 next_symbol = nbitstream::peek_bits_unguarded(&bitreader, symbol_bits);
+                    if (next_symbol != symbol)
+                        break;
+                    nbitstream::skip_bits_unguarded(&bitreader, symbol_bits);
+                    --num_reads;
+                }
+                run = run - num_reads;
+
+                const u8 rb = hdr->run_bits[symbol];
+                u32 ne = (run + (1U << rb) - 1) >> rb;  // number of encoding units needed for this run
+                while (ne > 1)
+                {
+                    nbitstream::write_bits(&bitwriter, symbol, symbol_bits);
+                    nbitstream::write_bits(&bitwriter, (1U << rb) - 1, rb);
+                    ne--;
+                }
+                if (ne > 0)
+                {
+                    nbitstream::write_bits(&bitwriter, symbol, symbol_bits);
+                    nbitstream::write_bits(&bitwriter, (run & ((1U << rb) - 1)) - 1, rb);
+                }
             }
-
-            u8 bit = read_bit(r.data, r.bit_pos);
-            if (bit == 1)
-                return 1;
-
-            u32 run = 0;
-            for (u32 b = 0; b < r.run_bits; ++b)
-                run |= read_bit(r.data, r.bit_pos) << b;
-
-            r.pending = run - 1;
-            return 0;
         }
 
-        // ------------------------------------------------------------
-        // RLE_ONES reader
-        // ------------------------------------------------------------
-        void mode_ones_reader_init(bit_reader_t& r, const u8* data, u32 run_bits, u32 decoded_bit_count)
-        {
-            r.data           = data;
-            r.bit_pos        = 0;
-            r.run_bits       = run_bits;
-            r.pending        = 0;
-            r.remaining_bits = decoded_bit_count;
-        }
-
-        s8 mode_ones_read_bit(bit_reader_t& r)
-        {
-            if (r.remaining_bits == 0)
-                return -1;
-            r.remaining_bits--;
-
-            if (r.pending > 0)
-            {
-                r.pending--;
-                return 1;
-            }
-
-            u8 bit = read_bit(r.data, r.bit_pos);
-            if (bit == 0)
-                return 0;
-
-            u32 run = 0;
-            for (u32 b = 0; b < r.run_bits; ++b)
-                run |= read_bit(r.data, r.bit_pos) << b;
-
-            r.pending = run - 1;
-            return 1;
-        }
     }  // namespace nrle
 }  // namespace ncore

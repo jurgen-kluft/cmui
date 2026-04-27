@@ -9,29 +9,6 @@ namespace ncore
 {
     namespace nrle
     {
-        // Selective Run Length Encoding (SRLE) is a simple compression scheme that encodes runs of either zeros or ones,
-        // depending on which is more efficient for the given data.
-        // The encoder chooses the mode (raw bits, RLE zeros, or RLE ones) based on the input data and the specified run
-        // length bits.
-        // See `docs/papers/selective_run_length_encoding.pdf` for the paper describing the algorithm and its rationale.
-
-        enum mode_t
-        {
-            MODE_ZEROS    = 0,
-            MODE_ONES     = 1,
-            MODE_RAW_BITS = 2,
-        };
-
-        struct header_t
-        {
-            u8 m_mode;
-        };
-
-        struct header1_t
-        {
-            u8 m_run_bits_per_symbol[2]; // run bits for zeros and ones modes, respectively
-        };
-
         struct out_t
         {
             u8* data;
@@ -39,42 +16,50 @@ namespace ncore
         };
 
         // ---- Encoder / decoder ----
-        u32  encode_bits(const u8* bits, u32 bit_count, u32 run_bits, out_t& out, header_t& header);
-        void decode_bits(const u8* in_bits, u32 in_bit_cnt, u8* out_bits, u32 out_bit_cnt, const header_t& header);
+        // This is a 'selective run-length encoding' (SRLE) algorithm that encodes runs of repeated
+        // symbols, and each symbol is assigned 'run bits' used to encode the run length.
+        // So before encoding, the input data is analyzed to determine the optimal 'run bits' for
+        // each symbol, which are then stored in the header of the encoded bitstream.
+        // During decoding, the header is read to reconstruct the symbol information and decode
+        // the bitstream accordingly.
 
-        // ---- bit reader ----
-        struct bit_reader_t
+        // returns the number of bits written to the output bitstream, or a negative value on error
+        // symbol_bits can be 1, 2, 4 or 8, and determines the size of each symbol in bits
+        // note: caller is responsible for ensuring that the output buffer is large enough to hold
+        //       the header block + encoded data 
+        // note: minimum size for the output buffer is 8 KiB!
+        s32 encode_bits(const u8* data, u32 data_bits, u8 symbol_bits, out_t& out);
+
+        // returns the size of the decoded bitstream in bits, or a negative value on error
+        s32 decoded_size(const u8* bitstream);
+
+        // returns the 'run bits' for a given symbol, or a negative value on error
+        s32 symbol_run_bits(const u8* bitstream, u8 symbol);
+
+        // returns the number of bits read from the input bitstream, or a negative value on error
+        // note: caller is responsible for ensuring that the output buffer is large enough to hold
+        //       the decoded data (see decoded_size() to obtain the size of the decoded bitstream)
+        s32 decode_bits(const u8* bitstream, out_t& out);
+
+        // ---- reader ----
+        // The reader is a utility for reading bits from the encoded bitstream during decoding.
+        // It maintains the current position in the bitstream and provides functions for reading
+        // bits and symbols.
+        struct symbol_t;
+        struct reader_t
         {
-            const u8* data;            // the bitstream data
-            u32       bit_pos;         // current position in bits
-            u32       run_bits;        // number of bits used to encode the run length in RLE modes
-            u32       pending;         // number of pending bits in the current run (if any)
-            u32       remaining_bits;  // number of bits remaining in stream
+            const u8*       m_data;            // the bitstream data
+            const symbol_t* m_symbols;         // array of symbols (points in bitstream) (size = m_num_symbols)
+            u32             m_num_symbols;     // number of symbols (also tells us symbol size in bits)
+            u32             m_bit_pos;         // current position in bits
+            u32             m_remaining_bits;  // number of bits remaining in stream
+            u32             m_reserved;        // reserved for future use, should be set to 0
         };
 
-        // ---- RAW reader ----
+        void reader_init(reader_t& r, const u8* bitstream);
 
-        void mode_raw_reader_init(bit_reader_t& r, const u8* data, u32 decoded_bit_count);
-        s8   mode_raw_read_bit(bit_reader_t& r);
-
-        // ---- RLE_ZEROS reader ----
-
-        void mode_zeros_reader_init(bit_reader_t& r, const u8* data, u32 run_bits, u32 decoded_bit_count);
-        s8   mode_zeros_read_bit(bit_reader_t& r);
-
-        // ---- RLE_ONES reader ----
-
-        void mode_ones_reader_init(bit_reader_t& r, const u8* data, u32 run_bits, u32 decoded_bit_count);
-        s8   mode_ones_read_bit(bit_reader_t& r);
-
-        // Usage:
-        //
-        //   s8 b;
-        //   while ((b = mode_xxxx_read_bit(reader)) >= 0)
-        //   {
-        //       process_bit((u8)b);
-        //   }
-
+        // returns the bits read as a signed value, or a negative value on error
+        s32 read_bits(reader_t& r, u32 num_bits);
 
     }  // namespace nrle
 }  // namespace ncore
