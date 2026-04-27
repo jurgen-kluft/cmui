@@ -35,44 +35,57 @@ namespace ncore
 
         s32 encode_bits(const u8* data, u32 data_bits, u8 symbol_bits, out_t& out)
         {
+            // output buffer is too small, minimum size is 8 KiB
+            if (out.size < 8192)
+                return -1;  
+
+            // only allowed symbol_bits; 1, 2, 4 or 8
+            if (symbol_bits != 1 && symbol_bits != 2 && symbol_bits != 4 && symbol_bits != 8)
+                return -1;
+
             // First figure out the optimal 'run_bits' for each symbol, which determines how the run lengths are encoded in the bitstream.
+            // Here we are using the output buffer to store the temporary symbol information
+            // (size in bits for each rb) during the analysis phase, and then we will write
+            // the header and encoded data to the same buffer after we have determined the
+            // optimal run_bits for each symbol.
             symbol_info_t* symbol_info = (symbol_info_t*)out.data;
+
+            // Initialize the symbol info
+            const u32 num_symbols      = 1U << symbol_bits;
+            const u32 symbol_info_size = sizeof(symbol_info_t) * num_symbols;
+            g_memclr(symbol_info, symbol_info_size);
 
             nbitstream::reader_t bitreader;
             nbitstream::init(&bitreader, data, data_bits);
             i32 num_reads = data_bits / symbol_bits;
             while (num_reads > 0)
             {
-                const s8 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
-                u32      run    = num_reads;
+                const u32 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
+                u32       count  = num_reads;
                 --num_reads;
                 while (num_reads > 0)
                 {
-                    const s8 next_symbol = nbitstream::peek_bits_unguarded(&bitreader, symbol_bits);
+                    const u32 next_symbol = nbitstream::peek_bits_unguarded(&bitreader, symbol_bits);
                     if (next_symbol != symbol)
                         break;
                     nbitstream::skip_bits_unguarded(&bitreader, symbol_bits);
                     --num_reads;
                 }
-                run = run - num_reads;
+                count = count - num_reads;
 
                 // here for each rb we calculate the size of the encoding and add to
                 // the total size for that rb
                 for (u32 rb = 0; rb <= 5; ++rb)
                 {
-                    u32 r = run;
-                    while (r >= (1U << rb))
-                    {
-                        symbol_info[symbol].sizeInBitsPerRb[rb] += symbol_bits + rb;
-                        r -= (1U << rb);
-                    }
+                    const u32 ne = (count + (1U << rb) - 1) >> rb;  // number of encoding units needed for this run
+                    symbol_info[symbol].sizeInBitsPerRb[rb] += ne * (symbol_bits + rb);
                 }
             }
 
             // Per symbol what is the optimal rb to use
-            header_t* hdr             = (header_t*)out.data;
-            hdr->decoded_size_in_bits = data_bits;
-            hdr->symbol_bits          = symbol_bits;
+            // Header is at the start of the output buffer, followed by the encoded data.
+            header_t* hdr      = (header_t*)out.data;
+            const u32 hdr_size = sizeof(header_t) + (sizeof(u8) * (1U << symbol_bits));
 
             for (u32 symbol = 0; symbol < (1U << symbol_bits); ++symbol)
             {
@@ -84,8 +97,8 @@ namespace ncore
                 }
                 hdr->run_bits[symbol] = (u8)best_rb;
             }
-
-            const u32 hdr_size = sizeof(header_t) + (sizeof(u8) * (1U << symbol_bits));
+            hdr->decoded_size_in_bits = data_bits;
+            hdr->symbol_bits          = symbol_bits;
 
             // Now we have the optimal rb for each symbol, we can encode the bitstream accordingly.
             nbitstream::writer_t bitwriter;
@@ -95,33 +108,47 @@ namespace ncore
             num_reads = data_bits / symbol_bits;
             while (num_reads > 0)
             {
-                const s8 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
-                u32      run    = num_reads;
+                const u32 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
+                u32       count  = num_reads;  // number of sequential occurrences of this symbol
                 --num_reads;
                 while (num_reads > 0)
                 {
-                    const s8 next_symbol = nbitstream::peek_bits_unguarded(&bitreader, symbol_bits);
+                    const u32 next_symbol = nbitstream::peek_bits_unguarded(&bitreader, symbol_bits);
                     if (next_symbol != symbol)
                         break;
                     nbitstream::skip_bits_unguarded(&bitreader, symbol_bits);
                     --num_reads;
                 }
-                run = run - num_reads;
+                count = count - num_reads;
 
                 const u8 rb = hdr->run_bits[symbol];
-                u32 ne = (run + (1U << rb) - 1) >> rb;  // number of encoding units needed for this run
-                while (ne > 1)
+                if (rb == 0)
                 {
-                    nbitstream::write_bits(&bitwriter, symbol, symbol_bits);
-                    nbitstream::write_bits(&bitwriter, (1U << rb) - 1, rb);
-                    ne--;
+                    // raw mode, just write the symbols sequentially without RLE encoding
+                    for (u32 i = 0; i < count; ++i)
+                    {
+                        if (nbitstream::write_bits(&bitwriter, symbol, symbol_bits) < 0)
+                            return -1;  // error writing bits
+                    }
                 }
-                if (ne > 0)
+                else
                 {
-                    nbitstream::write_bits(&bitwriter, symbol, symbol_bits);
-                    nbitstream::write_bits(&bitwriter, (run & ((1U << rb) - 1)) - 1, rb);
+                    const u32 max_chunk = (1U << rb);
+                    u32       remain    = count;
+                    while (remain > 0)
+                    {
+                        const u32 chunk = math::min(remain, max_chunk);
+                        if (nbitstream::write_bits(&bitwriter, symbol, symbol_bits) < 0)
+                            return -1;  // error writing bits
+                        if (nbitstream::write_bits(&bitwriter, chunk - 1, rb) < 0)
+                            return -1;  // error writing bits
+                        remain -= chunk;
+                    }
                 }
             }
+
+            const u32 total_bits = nbitstream::finalize(&bitwriter);
+            return (s32)(hdr_size * 8 + total_bits);
         }
 
     }  // namespace nrle

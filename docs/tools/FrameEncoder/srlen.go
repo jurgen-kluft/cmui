@@ -122,10 +122,7 @@ func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, numberOfSymbols int
 			maxChunk := (1 << rb[s])
 			remain := run
 			for remain > 0 {
-				chunk := remain
-				if chunk > maxChunk {
-					chunk = maxChunk
-				}
+				chunk := min(remain, maxChunk)
 				out.WriteBits(uint32(s), sizeofSymbolInBits)
 				out.WriteBits(uint32(chunk-1), rb[s])
 				remain -= chunk
