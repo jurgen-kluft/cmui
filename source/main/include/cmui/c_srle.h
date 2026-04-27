@@ -24,8 +24,12 @@ namespace ncore
 
         struct header_t
         {
-            u8 mode;
-            u8 run_bits;
+            u8 m_mode;
+        };
+
+        struct header1_t
+        {
+            u8 m_run_bits_per_symbol[2]; // run bits for zeros and ones modes, respectively
         };
 
         struct out_t
