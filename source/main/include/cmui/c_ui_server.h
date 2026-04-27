@@ -28,10 +28,10 @@ namespace ncore
 
         struct message_t
         {
-            u16      msg_type;
-            uint8_t  mac[6];
-            u32      length;
-            uint8_t  data[];
+            u16 msg_type;
+            u8  mac[6];
+            u32 length;
+            u8  data[];
         };
 
         typedef message_t *(*msg_alloc_fn)(u32 length);

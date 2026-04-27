@@ -171,8 +171,8 @@ namespace ncore
             if (!m)
                 return;
 
-            m->type = MSG_CLIENT_CONNECTED;
-            m->len  = 0;
+            m->msg_type = MSG_CLIENT_CONNECTED;
+            m->length  = 0;
             memcpy(m->mac, mac, 6);
 
             if (msgq_push(&s->to_main, m) < 0)
@@ -235,7 +235,7 @@ namespace ncore
                 if (!m)
                     break;
 
-                if (m->type == MSG_KICK_CLIENT)
+                if (m->msg_type == MSG_KICK_CLIENT)
                 {
                     client_t *c = find_client_by_mac(s, m->mac);
                     if (c && c->fd != -1)

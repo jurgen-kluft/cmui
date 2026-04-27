@@ -57,7 +57,7 @@ namespace ncore
         // should be used with care.
         // note: this function is usefull if you know the exact amount of 'read_bits' you
         //       need to call and want to avoid the overhead of validation in read_bits().
-        u32 read_bits_unguarded(reader_t* bs, u8 num_bits)
+        inline u32 read_bits_unguarded(reader_t* bs, u8 num_bits)
         {
             while (bs->accu_num_bits < 32 && (bs->pos * 8) < bs->num_bits)
             {
@@ -74,7 +74,7 @@ namespace ncore
             return v;
         }
 
-        u32 peek_bits_unguarded(reader_t* bs, u8 num_bits)
+        inline u32 peek_bits_unguarded(reader_t* bs, u8 num_bits)
         {
             while (bs->accu_num_bits < 32 && (bs->pos * 8) < bs->num_bits)
             {
@@ -87,7 +87,7 @@ namespace ncore
             return (u32)(bs->accu_register & mask);
         }
 
-        void skip_bits_unguarded(reader_t* bs, u8 num_bits)
+        inline void skip_bits_unguarded(reader_t* bs, u8 num_bits)
         {
             while (bs->accu_num_bits < 32 && (bs->pos * 8) < bs->num_bits)
             {
