@@ -2,6 +2,8 @@
 
 #include "cmui/c_ui_server.h"
 
+#ifdef TARGET_MAC
+
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/event.h>
@@ -355,3 +357,5 @@ namespace ncore
 
     }  // namespace nmui
 }  // namespace ncore
+
+#endif // TARGET_MAC

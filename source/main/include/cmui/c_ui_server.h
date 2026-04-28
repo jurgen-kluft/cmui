@@ -31,7 +31,7 @@ namespace ncore
             u16 msg_type;
             u8  mac[6];
             u32 length;
-            u8  data[];
+            //u8  data[];
         };
 
         typedef message_t *(*msg_alloc_fn)(u32 length);
