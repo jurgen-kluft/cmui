@@ -7,11 +7,6 @@
 
 using namespace ncore;
 
-namespace
-{
-
-}
-
 UNITTEST_SUITE_BEGIN(srle)
 {
     static u32 pack_symbols(const u8* symbols, u32 count, u8 symbol_bits, u8* buffer, u32 buffer_size)
