@@ -15,31 +15,31 @@ The Encoder and Decoder
 ✅ This results in a palette of up to 276 colors (4 in P0, 16 in P1, 256 in P2) with the most frequent colors
 ✅ Any color that is not in the palete is encoded as SELECTOR_RAW in the selector stream, and the full RGB565 value is written to the P3 stream
 ✅ Selector stream has the following 4 symbols:
-  - SELECTOR_P0 (0): pixel value is in P0 stream, read 2-bit symbol from P0 stream to get palette index
-  - SELECTOR_P1 (1): pixel value is in P1 stream, read 4-bit symbol from P1 stream to get palette index
-  - SELECTOR_P2 (3): pixel value is in P2 stream, read 8-bit symbol from P2 stream to get palette index
-  - SELECTOR_RAW (2): pixel value is not in palette, read full RGB565 value from P3 stream
+  - SELECTOR_P2 (0): pixel value is in P0 stream, read 2-bit symbol from P0 stream to get palette index
+  - SELECTOR_P4 (1): pixel value is in P1 stream, read 4-bit symbol from P1 stream to get palette index
+  - SELECTOR_P8 (3): pixel value is in P2 stream, read 8-bit symbol from P2 stream to get palette index
+  - SELECTOR_P16 (2): pixel value is not from a palette, read full RGB565 value from P16 stream
 ✅ Line‑change stream → real BitStream → SRLEN
 ✅ Run‑change stream → real BitStream → SRLEN
 ✅ Selector stream (2‑bit symbols) → real BitStream → SRLEN
 ✅ Payload streams:
-  - P0: 2‑bit packed stream (SRLEN)
-  - P1: 4‑bit packed stream (SRLEN)
-  - P2: 8‑bit packed byte stream (SRLEN)
-  - P3: real 16‑bit RGB565 stream (no SRLEN)
+  - P2: 2‑bit packed stream (SRLEN)
+  - P4: 4‑bit packed stream (SRLEN)
+  - P8: 8‑bit packed byte stream (SRLEN)
+  - P16: real 16‑bit RGB565 stream (no SRLEN)
 ✅ Selector chooses which payload stream consumes data
 ✅ No counters pretending to be streams, payload streams are real streams
 ✅ Full report written to console after encoding, showing:
   - Image dimensions
   - Number of pixels
   - RAW size of image in bytes (width * height * 2 for RGB565)
-  - Size of line stream in bytes, before and after SRLEN + % compression ratio
-  - Size of run stream in bytes, before and after SRLEN + % compression ratio
-  - Size of selector stream in bytes, before and after SRLEN + % compression ratio
-  - Size of P0 stream in bytes, before and after SRLEN + % compression ratio
-  - Size of P1 stream in bytes, before and after SRLEN + % compression ratio
+  - Size of LINE stream in bytes, before and after SRLEN + % compression ratio
+  - Size of RUN stream in bytes, before and after SRLEN + % compression ratio
+  - Size of SELECTOR stream in bytes, before and after SRLEN + % compression ratio
   - Size of P2 stream in bytes, before and after SRLEN + % compression ratio
-  - Size of RAW stream in bytes
+  - Size of P4 stream in bytes, before and after SRLEN + % compression ratio
+  - Size of P8 stream in bytes, before and after SRLEN + % compression ratio
+  - Size of P16 stream in bytes, before and after SRLEN + % compression ratio
   - Total size of all streams combined, before and after SRLEN + % compression ratio
   - Compression ratio of total size after SRLEN compared to RAW size
 ✅ Encoder and decoder implementation
