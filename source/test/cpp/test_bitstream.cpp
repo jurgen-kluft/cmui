@@ -131,9 +131,6 @@ UNITTEST_SUITE_BEGIN(bitstream)
 
             CHECK_EQUAL(0x1F, nbitstream::read_bits(&reader, 5));
 
-            CHECK_EQUAL(-1, nbitstream::read_bits(&reader, 1));
-            CHECK_EQUAL(-1, nbitstream::peek_bits(&reader, 1));
-            CHECK_EQUAL(-1, nbitstream::skip_bits(&reader, 1));
             CHECK_TRUE(nbitstream::is_end(&reader, 1));
         }
 

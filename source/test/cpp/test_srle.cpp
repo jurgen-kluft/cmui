@@ -106,10 +106,15 @@ UNITTEST_SUITE_BEGIN(srle)
             symbols[43] = 2;
 
             u8       source[16] = {0};
-            const u32 data_bits = pack_symbols(symbols, (u32)(sizeof(symbols) / sizeof(symbols[0])), 2, source, sizeof(source));
+            const u32 data_bits = pack_symbols(symbols, DARRAYSIZE(symbols), 2, source, sizeof(source));
 
             nrle::encoder_t encoder = {};
-            CHECK_EQUAL(2, nrle::analyze_bits(&encoder, source, data_bits, 2));
+            const u32 expected_encoded_size = ((2 + 5) + (2 + 5) + 2 + 2 + 2 + (2 + 5) + 7) / 8;
+            CHECK_EQUAL(expected_encoded_size, nrle::analyze_bits(&encoder, source, data_bits, 2));
+            CHECK_EQUAL(0, encoder.m_symbol_rb[0]);
+            CHECK_EQUAL(0, encoder.m_symbol_rb[1]);
+            CHECK_EQUAL(5, encoder.m_symbol_rb[2]);
+            CHECK_EQUAL(0, encoder.m_symbol_rb[3]);
 
             nrle::header_t header = {};
             u8             encoded[16] = {0};
