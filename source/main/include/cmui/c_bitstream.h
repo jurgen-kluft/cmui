@@ -41,6 +41,7 @@ namespace ncore
         //
         void init(writer_t* bs, u8* buffer, u32 capacity_bits);
         s8   write_bits(writer_t* bs, u32 value, u8 num_bits);
+        s8   write_bits_repeat(writer_t* bs, u32 value, u8 num_bits, s32 n);
         u32  finalize(writer_t* bs);
 
         //
@@ -51,7 +52,8 @@ namespace ncore
         s32  read_bits(reader_t* bs, u8 num_bits);
         s32  peek_bits(reader_t* bs, u8 num_bits);
         s8   skip_bits(reader_t* bs, u8 num_bits);
-        bool is_end(const reader_t* bs, u8 sizeof_symbol_bits);
+
+        inline bool is_end(const reader_t* bs, u8 sizeof_symbol_bits) { return (bs->read_bits + sizeof_symbol_bits) > bs->num_bits; }
 
         // read bits function that requires you to do the validation. It is faster but
         // should be used with care.

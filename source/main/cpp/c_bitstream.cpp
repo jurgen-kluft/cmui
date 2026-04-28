@@ -49,6 +49,41 @@ namespace ncore
             return 0;
         }
 
+        s8 write_bits_repeat(writer_t* bs, u32 value, u8 num_bits, s32 n)
+        {
+            if (num_bits == 0 || num_bits > 30 || bs->finalized)
+                return -1;
+
+            if ((bs->num_bits + num_bits) > bs->capacity_bits)
+                return -1;
+
+            const u32 mask = ((1u << num_bits) - 1u);
+            for (s32 i = 0; i < n; ++i)
+            {
+                // accumulate bits (LSB-first)
+                bs->accu_register |= (u64(value & mask) << bs->accu_num_bits);
+                bs->accu_num_bits += num_bits;
+
+                // flush 32 bits at once
+                if (bs->accu_num_bits >= 32)
+                {
+                    bs->buf[bs->pos++] = (u8)(bs->accu_register);
+                    bs->accu_register >>= 8;
+                    bs->buf[bs->pos++] = (u8)(bs->accu_register);
+                    bs->accu_register >>= 8;
+                    bs->buf[bs->pos++] = (u8)(bs->accu_register);
+                    bs->accu_register >>= 8;
+                    bs->buf[bs->pos++] = (u8)(bs->accu_register);
+                    bs->accu_register >>= 8;
+                    bs->accu_num_bits -= 32;
+                }
+            }
+
+            bs->num_bits += num_bits * n;
+
+            return 0;
+        }
+
         u32 finalize(writer_t* bs)
         {
             // flush remaining bits byte-by-byte
@@ -102,9 +137,6 @@ namespace ncore
             if (num_bits == 0 || num_bits > 30)
                 return -1;
 
-            if ((bs->read_bits + num_bits) > bs->num_bits)
-                return -1;
-
             fill(bs);
 
             const u32 mask = (1u << num_bits) - 1u;
@@ -144,14 +176,6 @@ namespace ncore
             bs->accu_num_bits -= num_bits;
             bs->read_bits += num_bits;
             return 0;
-        }
-
-        bool is_end(const reader_t* bs, u8 sizeof_symbol_bits)
-        {
-            if (bs->read_bits >= bs->num_bits)
-                return true;
-
-            return (bs->num_bits - bs->read_bits) < sizeof_symbol_bits;
         }
 
     }  // namespace nbitstream
