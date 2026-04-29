@@ -4,6 +4,7 @@
 #include "ccore/c_qsort.h"
 
 #include "cmui/c_bitstream.h"
+#include "cmui/c_srle.h"
 #include "cmui/c_frame_encode.h"
 
 namespace ncore
@@ -75,26 +76,23 @@ namespace ncore
             return 0;
         }
 
-        static inline u32 s_number_of_bits_to_bytes(u32 bits) { return (bits + 7) >> 3; }
+        static inline u32 s_units_to_bytes(u32 units, u32 bits_per_unit) { return ((units * bits_per_unit) + 7) >> 3; }
         static inline u16 s_rgba888_to_rgb565(u32 rgba) { return ((rgba >> 8) & 0xf800) | ((rgba >> 5) & 0x07e0) | ((rgba >> 3) & 0x001f); }
 
-        s32 encode_frame(encoder_t& encoder, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 run_length)
+        s32 compress(u8 const* stream, u32 stream_size_in_bits, u8 symbol_bits, u8* out_stream)
         {
-            // u8*  m_selector_stream;          //
-            // u8*  m_line_change_stream;       //
-            // u8*  m_run_change_stream;        //
-            // u8*  m_p2_stream;                //
-            // u8*  m_p4_stream;                //
-            // u8*  m_p8_stream;                //
-            // u16* m_p16_stream;               //
-            // u32  m_selector_stream_size;     // Size of selector stream in bytes
-            // u32  m_line_change_stream_size;  // Size of line change stream in bytes
-            // u32  m_run_change_stream_size;   // Size of run change stream in bytes
-            // u32  m_p2_stream_size;           // Size of P2 stream in bytes
-            // u32  m_p4_stream_size;           // Size of P4 stream in bytes
-            // u32  m_p8_stream_size;           // Size of P8 stream in bytes
-            // u32  m_p16_stream_size;          // Size of P16 stream in bytes
+            // return number of bytes
+            return -1;
+        }
 
+        s32 move_data16(u16 const* stream, u32 count, u16* out_stream)
+        {
+            // return number of bytes
+            return -1;
+        }
+
+        s32 encode_frame(encoder_t& encoder, header_t& out_hdr, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 run_length)
+        {
             // Initialize histogram and palette
 
             g_memory_fill(encoder.m_palette, 0, sizeof(encoder.m_palette));
@@ -122,8 +120,8 @@ namespace ncore
 
             for (u32 i = 0; i < 276; ++i)
             {
-                u16 const color = encoder.m_histogram_color[i];
-                encoder.m_palette[i]  = color;
+                u16 const color      = encoder.m_histogram_color[i];
+                encoder.m_palette[i] = color;
                 if (encoder.m_histogram_count[color] == 0)
                     break;  // No more colors in the image
             }
@@ -160,26 +158,26 @@ namespace ncore
             const u32 raw_pixel_count = width * height - p2_pixel_count - p4_pixel_count - p8_pixel_count;
 
             // Now we can calculate the size of each stream:
-            const u32 p2_stream_size_in_bits          = p2_pixel_count * 2;                                // 2 bits per pixel
-            const u32 p4_stream_size_in_bits          = p4_pixel_count * 4;                                // 4 bits per pixel
-            const u32 p8_stream_size_in_bits          = p8_pixel_count * 8;                                // 8 bits per pixel
-            const u32 p16_stream_size_in_bits         = raw_pixel_count * 16;                              // 16 bits per pixel (raw color)
-            const u32 selector_stream_size_in_bits    = total_pixel_count * 2;                             // 2 bits per pixel (SELECTOR_RAW)
-            const u32 line_change_stream_size_in_bits = height;                                            // 1 bit per line, rounded up to the nearest byte
-            const u32 run_change_stream_size_in_bits  = ((width + run_length - 1) / run_length) * height;  // 1 bit per run, rounded up to the nearest byte
+            const u32 p16_stream_size_in_units         = raw_pixel_count;                                   // 16 bits per pixel (raw color)
+            const u32 p8_stream_size_in_units          = p8_pixel_count;                                    // 8 bits per pixel
+            const u32 p4_stream_size_in_units          = p4_pixel_count;                                    // 4 bits per pixel
+            const u32 p2_stream_size_in_units          = p2_pixel_count;                                    // 2 bits per pixel
+            const u32 selector_stream_size_in_units    = total_pixel_count;                                 // 2 bits per pixel (SELECTOR_RAW)
+            const u32 line_change_stream_size_in_units = height;                                            // 1 bit per line, rounded up to the nearest byte
+            const u32 run_change_stream_size_in_units  = ((width + run_length - 1) / run_length) * height;  // 1 bit per run, rounded up to the nearest byte
 
             // Setup pointers for each stream, using out_data as a contiguous block of memory for all streams
-            header_t* header                 = (header_t*)out_data;          // Header is at the start of out_data
-            u8*       p2_stream_ptr          = out_data + sizeof(header_t);  // Start after the header
-            u8*       p4_stream_ptr          = p2_stream_ptr + s_number_of_bits_to_bytes(p2_stream_size_in_bits);
-            u8*       p8_stream_ptr          = p4_stream_ptr + s_number_of_bits_to_bytes(p4_stream_size_in_bits);
-            u16*      p16_stream_ptr         = (u16*)(p8_stream_ptr + s_number_of_bits_to_bytes(p8_stream_size_in_bits));
-            u8*       selector_stream_ptr    = (u8*)p16_stream_ptr + s_number_of_bits_to_bytes(p16_stream_size_in_bits);
-            u8*       line_change_stream_ptr = selector_stream_ptr + s_number_of_bits_to_bytes(selector_stream_size_in_bits);
-            u8*       run_change_stream_ptr  = line_change_stream_ptr + s_number_of_bits_to_bytes(line_change_stream_size_in_bits);
+            header_t* header                 = &out_hdr;  // Header is given by the caller
+            u8*       p16_stream_ptr         = out_data;
+            u8*       p8_stream_ptr          = p16_stream_ptr + s_units_to_bytes(p16_stream_size_in_units, 16);
+            u8*       p4_stream_ptr          = p8_stream_ptr + s_units_to_bytes(p8_stream_size_in_units, 8);
+            u8*       p2_stream_ptr          = p4_stream_ptr + s_units_to_bytes(p4_stream_size_in_units, 4);
+            u8*       selector_stream_ptr    = p2_stream_ptr + s_units_to_bytes(p2_stream_size_in_units, 2);
+            u8*       line_change_stream_ptr = selector_stream_ptr + s_units_to_bytes(selector_stream_size_in_units, 2);
+            u8*       run_change_stream_ptr  = line_change_stream_ptr + s_units_to_bytes(line_change_stream_size_in_units, 1);
 
             // Verify output capacity for the worst-case layout.
-            u8* const out_data_end = run_change_stream_ptr + s_number_of_bits_to_bytes(run_change_stream_size_in_bits);
+            u8* const out_data_end = run_change_stream_ptr + s_units_to_bytes(run_change_stream_size_in_units, 1);
             if ((u32)(out_data_end - out_data) > out_data_capacity)
                 return -1;
 
@@ -203,21 +201,21 @@ namespace ncore
                 encoder.m_histogram_color[encoder.m_palette[i]] = (i16)i;
             }
 
-            nbitstream::writer_t p2_writer;
-            nbitstream::writer_t p4_writer;
-            nbitstream::writer_t p8_writer;
             nbitstream::writer_t p16_writer;
+            nbitstream::writer_t p8_writer;
+            nbitstream::writer_t p4_writer;
+            nbitstream::writer_t p2_writer;
             nbitstream::writer_t selector_writer;
             nbitstream::writer_t line_change_writer;
             nbitstream::writer_t run_change_writer;
 
-            nbitstream::init(&p2_writer, p2_stream_ptr, p2_stream_size_in_bits);
-            nbitstream::init(&p4_writer, p4_stream_ptr, p4_stream_size_in_bits);
-            nbitstream::init(&p8_writer, p8_stream_ptr, p8_stream_size_in_bits);
-            nbitstream::init(&p16_writer, (u8*)p16_stream_ptr, p16_stream_size_in_bits);
-            nbitstream::init(&selector_writer, selector_stream_ptr, selector_stream_size_in_bits);
-            nbitstream::init(&line_change_writer, line_change_stream_ptr, line_change_stream_size_in_bits);
-            nbitstream::init(&run_change_writer, run_change_stream_ptr, run_change_stream_size_in_bits);
+            nbitstream::init(&p16_writer, (u8*)p16_stream_ptr, p16_stream_size_in_units * 16);
+            nbitstream::init(&p8_writer, p8_stream_ptr, p8_stream_size_in_units * 8);
+            nbitstream::init(&p4_writer, p4_stream_ptr, p4_stream_size_in_units * 4);
+            nbitstream::init(&p2_writer, p2_stream_ptr, p2_stream_size_in_units * 2);
+            nbitstream::init(&selector_writer, selector_stream_ptr, selector_stream_size_in_units * 2);
+            nbitstream::init(&line_change_writer, line_change_stream_ptr, line_change_stream_size_in_units * 1);
+            nbitstream::init(&run_change_writer, run_change_stream_ptr, run_change_stream_size_in_units * 1);
 
             // Now that we have everything set up, we can start encoding the image by comparing it to the
             // previous image and filling the streams accordingly.
@@ -284,26 +282,65 @@ namespace ncore
                 nbitstream::write_bits(&line_change_writer, line_changed ? 1u : 0u, 1);
             }
 
-            const u32 p2_bits          = nbitstream::finalize(&p2_writer);
-            const u32 p4_bits          = nbitstream::finalize(&p4_writer);
-            const u32 p8_bits          = nbitstream::finalize(&p8_writer);
-            const u32 p16_bits         = nbitstream::finalize(&p16_writer);
-            const u32 selector_bits    = nbitstream::finalize(&selector_writer);
-            const u32 line_change_bits = nbitstream::finalize(&line_change_writer);
-            const u32 run_change_bits  = nbitstream::finalize(&run_change_writer);
+            const u32 p2_units          = nbitstream::finalize(&p2_writer) / 2;
+            const u32 p4_units          = nbitstream::finalize(&p4_writer) / 4;
+            const u32 p8_units          = nbitstream::finalize(&p8_writer) / 8;
+            const u32 p16_units         = nbitstream::finalize(&p16_writer) / 16;
+            const u32 selector_units    = nbitstream::finalize(&selector_writer) / 2;
+            const u32 line_change_units = nbitstream::finalize(&line_change_writer) / 1;
+            const u32 run_change_units  = nbitstream::finalize(&run_change_writer) / 1;
 
-            ASSERT(p2_bits == p2_stream_size_in_bits);
-            ASSERT(p4_bits == p4_stream_size_in_bits);
-            ASSERT(p8_bits == p8_stream_size_in_bits);
-            ASSERT(p16_bits == p16_stream_size_in_bits);
-            ASSERT(selector_bits == selector_stream_size_in_bits);
-            ASSERT(line_change_bits == line_change_stream_size_in_bits);
-            ASSERT(run_change_bits == run_change_stream_size_in_bits);
+            ASSERT(p2_units == p2_stream_size_in_units);
+            ASSERT(p4_units == p4_stream_size_in_units);
+            ASSERT(p8_units == p8_stream_size_in_units);
+            ASSERT(p16_units == p16_stream_size_in_units);
+            ASSERT(selector_units == selector_stream_size_in_units);
+            ASSERT(line_change_units == line_change_stream_size_in_units);
+            ASSERT(run_change_units == run_change_stream_size_in_units);
 
-            const u32 encoded_size = sizeof(header_t) + s_number_of_bits_to_bytes(p2_bits) + s_number_of_bits_to_bytes(p4_bits) + s_number_of_bits_to_bytes(p8_bits) + s_number_of_bits_to_bytes(p16_bits) + s_number_of_bits_to_bytes(selector_bits) +
-                                     s_number_of_bits_to_bytes(line_change_bits) + s_number_of_bits_to_bytes(run_change_bits);
+            // Some of the stream we are going to apply SRLE to it and this will result in all of the streams either
+            // being the same size or smaller.
+            // So we will start to re-compute the location of all the streams one by one.
 
-            // Some of the stream we are going to apply SRLE to it
+            u8* p16_stream_ptr_srle          = out_data;
+            u32 p16_stream_srle_size         = p16_units; // p16 already exists here and we are not compressing it
+            u8* p8_stream_ptr_srle           = p16_stream_ptr_srle + p16_stream_srle_size;
+            u32 p8_stream_srle_size          = compress(p8_stream_ptr, p8_units, 8, p8_stream_ptr_srle);
+            u8* p4_stream_ptr_srle           = p8_stream_ptr_srle + p8_stream_srle_size;
+            u32 p4_stream_srle_size          = compress(p4_stream_ptr, p4_units, 4, p4_stream_ptr_srle);
+            u8* p2_stream_ptr_srle           = p4_stream_ptr_srle + p4_stream_srle_size;
+            u32 p2_stream_srle_size          = compress(p2_stream_ptr, p2_units, 2, p2_stream_ptr_srle);
+            u8* selector_stream_ptr_srle     = p2_stream_ptr_srle + p2_stream_srle_size;
+            u32 selector_stream_srle_size    = compress(selector_stream_ptr, selector_units, 2, selector_stream_ptr_srle);
+            u8* line_change_stream_ptr_srle  = selector_stream_ptr_srle + selector_stream_srle_size;
+            u32 line_change_stream_srle_size = compress(line_change_stream_ptr, line_change_units, 2, line_change_stream_ptr_srle);
+            u8* run_change_stream_ptr_srle   = line_change_stream_ptr_srle + line_change_stream_srle_size;
+            u32 run_change_stream_srle_size  = compress(run_change_stream_ptr, run_change_units, 1, run_change_stream_ptr_srle);
+
+            const u32 encoded_size = p16_stream_srle_size + p8_stream_srle_size + p4_stream_srle_size + p2_stream_srle_size + selector_stream_srle_size + line_change_stream_srle_size + run_change_stream_srle_size;
+
+            // Fill in the header
+            out_hdr.m_magic                            = 0x464d5245;  // 'FRME' in ASCII
+
+            out_hdr.m_p16_encoded_size                 = p16_stream_srle_size;
+            out_hdr.m_p8_encoded_size                  = p8_stream_srle_size;
+            out_hdr.m_p4_encoded_size                  = p4_stream_srle_size;
+            out_hdr.m_p2_encoded_size                  = p2_stream_srle_size;
+            out_hdr.m_selector_encoded_size            = selector_stream_srle_size;
+            out_hdr.m_line_change_encoded_size         = line_change_stream_srle_size;
+            out_hdr.m_run_change_encoded_size          = run_change_stream_srle_size;
+
+            out_hdr.m_p16_stream_decoded_units         = p16_units;
+            out_hdr.m_p8_stream_decoded_units          = p8_units;
+            out_hdr.m_p4_stream_decoded_units          = p4_units;
+            out_hdr.m_p2_stream_decoded_units          = p2_units;
+            out_hdr.m_selector_stream_decoded_units    = selector_units;
+            out_hdr.m_line_change_stream_decoded_units = line_change_units;
+            out_hdr.m_run_change_stream_decoded_units  = run_change_units;
+
+            out_hdr.m_width                            = width;
+            out_hdr.m_height                           = height;
+            out_hdr.m_run_length                       = run_length;
 
             return encoded_size <= out_data_capacity ? (s32)encoded_size : -1;
         }

@@ -312,13 +312,13 @@ func main() {
 	rawBytes := pixelCount * 2
 	fmt.Printf("Image: %dx%d (%d px)\n", w, h, pixelCount)
 	fmt.Printf("RAW RGB565: %d bytes\n", rawBytes)
-	fmt.Printf("Line     : %6d bytes (SRLEN)\n", (lineEncodedNumBits+7)/8)
-	fmt.Printf("Run      : %6d bytes (SRLEN)\n", (runEncodedNumBits+7)/8)
-	fmt.Printf("Selector : %6d bytes (SRLEN)\n", (selEncodedNumBits+7)/8)
-	fmt.Printf("P0       : %6d bytes (SRLEN)\n", (p0EncodedNumBits+7)/8)
-	fmt.Printf("P1       : %6d bytes (SRLEN)\n", (p1EncodedNumBits+7)/8)
-	fmt.Printf("P2       : %6d bytes (SRLEN)\n", (p2EncodedNumBits+7)/8)
-	fmt.Printf("RAW P3   : %6d bytes\n", len(rawStream)*2)
+	fmt.Printf("P16      : %6d bytes\n", len(rawStream)*2)
+	fmt.Printf("P8       : %6d bytes -> %6d bytes (SRLEN)\n", (p2StreamNumBits+7)/8, (p2EncodedNumBits+7)/8)
+	fmt.Printf("P4       : %6d bytes -> %6d bytes (SRLEN)\n", (p1StreamNumBits+7)/8, (p1EncodedNumBits+7)/8)
+	fmt.Printf("P2       : %6d bytes -> %6d bytes (SRLEN)\n", (p0StreamNumBits+7)/8, (p0EncodedNumBits+7)/8)
+	fmt.Printf("Selector : %6d bytes -> %6d bytes (SRLEN)\n", (selectorStreamNumBits+7)/8, (selEncodedNumBits+7)/8)
+	fmt.Printf("Line     : %6d bytes -> %6d bytes (SRLEN)\n", (lineStreamNumBits+7)/8, (lineEncodedNumBits+7)/8)
+	fmt.Printf("Run      : %6d bytes -> %6d bytes (SRLEN)\n", (runStreamNumBits+7)/8, (runEncodedNumBits+7)/8)
 
 	total := int64((lineEncodedNumBits + 7) / 8)
 	total += (runEncodedNumBits + 7) / 8

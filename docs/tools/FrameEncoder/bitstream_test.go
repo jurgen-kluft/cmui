@@ -25,15 +25,15 @@ func TestBitStreamWriterReader_RoundTripMixedWidths(t *testing.T) {
 	// BitStream needs to be initialized with a capacity that can hold all bits; otherwise it will panic on writes.
 
 	// BitStream needs to be initialized with a capacity that can hold all bits; otherwise it will panic on writes.
-	w := NewBitStreamWriter(totalNumbits)
+	w := NewBitStreamWriter(int64(totalNumbits))
 	for _, e := range seq {
 		w.WriteBits(uint32(e.v), e.n)
 	}
 	bits := w.Finalize()
 
-	var expectedBits int
+	var expectedBits int64
 	for _, e := range seq {
-		expectedBits += int(e.n)
+		expectedBits += int64(e.n)
 	}
 	if bits != expectedBits {
 		t.Fatalf("Finalize bits mismatch: got %d want %d", bits, expectedBits)
@@ -188,13 +188,13 @@ func TestBitStreamWriter_DeterministicStress(t *testing.T) {
 	}
 
 	entries := make([]entry, N)
-	totalBits := 0
+	totalBits := int64(0)
 	for i := range entries {
 		n := uint8((i % 32) + 1) // widths 1,2,...,32,1,2,...
 		raw := next()
 		mask := uint32((uint64(1) << n) - 1)
 		entries[i] = entry{v: int32(raw & mask), n: n}
-		totalBits += int(n)
+		totalBits += int64(n)
 	}
 
 	w := NewBitStreamWriter(totalBits)

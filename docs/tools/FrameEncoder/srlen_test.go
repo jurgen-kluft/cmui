@@ -34,20 +34,20 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 
 	inputSymbols := []uint32{1, 1, 1, 2, 2, 3, 3, 3, 3, 0}
 
-	input := NewBitStreamWriter(len(inputSymbols) * int(symbolBits))
+	input := NewBitStreamWriter(int64(len(inputSymbols) * int(symbolBits)))
 	for _, s := range inputSymbols {
 		input.WriteBits(s, symbolBits)
 	}
 	input.Finalize()
 
-	encoded := NewBitStreamWriter(len(inputSymbols) * int(symbolBits) * 2)
+	encoded := NewBitStreamWriter(int64(len(inputSymbols) * int(symbolBits) * 2))
 	rb, err := Encode(input.Reader(), symbolBits, numberOfSymbols, encoded)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 	encoded.Finalize()
 
-	decoded := NewBitStreamWriter(len(inputSymbols) * int(symbolBits))
+	decoded := NewBitStreamWriter(int64(len(inputSymbols) * int(symbolBits)))
 	err = Decode(encoded.Reader(), symbolBits, rb, decoded)
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
@@ -74,7 +74,7 @@ func TestDecodeReturnsErrorOnTruncatedRunLength(t *testing.T) {
 	const symbolBits = uint8(2)
 
 	// Encoded stream contains only the symbol "1" and omits its run-length bits (rb=2 requires 2 more bits).
-	encoded := NewBitStreamWriter(int(symbolBits))
+	encoded := NewBitStreamWriter(int64(symbolBits))
 	encoded.WriteBits(1, symbolBits)
 	encoded.Finalize()
 
@@ -107,14 +107,14 @@ func TestEncodeCompressesAndRoundTrips(t *testing.T) {
 
 	// Build unencoded bit stream.
 	rawBits := numSymbols * int(symbolBits)
-	input := NewBitStreamWriter(rawBits)
+	input := NewBitStreamWriter(int64(rawBits))
 	for _, s := range symbols {
 		input.WriteBits(s, symbolBits)
 	}
 	input.Finalize()
 
 	// Encode – allocate a generous output buffer; we'll measure actual bits used.
-	encoded := NewBitStreamWriter(rawBits * 2)
+	encoded := NewBitStreamWriter(int64(rawBits * 2))
 	rb, err := Encode(input.Reader(), symbolBits, numberOfSyms, encoded)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
@@ -135,7 +135,7 @@ func TestEncodeCompressesAndRoundTrips(t *testing.T) {
 	}
 
 	// Decode and verify round-trip fidelity.
-	decoded := NewBitStreamWriter(rawBits)
+	decoded := NewBitStreamWriter(int64(rawBits))
 	if err := Decode(encoded.Reader(), symbolBits, rb, decoded); err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
