@@ -22,6 +22,13 @@ func rgb565(r, g, b uint32) uint16 {
 	return uint16(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3))
 }
 
+func rgba8888_to_rgb565(c uint32) uint16 {
+	r := uint32((c >> 16) & 0xFF)
+	g := uint32((c >> 8) & 0xFF)
+	b := uint32(c & 0xFF)
+	return rgb565(r, g, b)
+}
+
 type histocolor struct {
 	color      uint16 // the RGB565 color value
 	colorCount int32  // occurrence count of the color in an image
@@ -123,15 +130,16 @@ func printImageInfo(path string, histogram []histocolor, w int, h int) {
 
 func main() {
 	var (
-		prevPath  = flag.String("prev", "", "previous PNG image (optional)")
-		nextPath  = flag.String("next", "", "next PNG image (required)")
+		nextPath  = flag.String("main", "", "main PNG image (required)")
+		prevPath  = flag.String("prev", "", "prev PNG image (optional)")
 		runSize   = flag.Int("run", 32, "run size: 16, 32, or 64")
 		prevShift = flag.Bool("prev-shift", false, "shift next image down by 1 line as prev")
+		prevFill  = flag.Uint("prev-fill", 0x000000, "fill prev image with a color (black as default)")
 	)
 	flag.Parse()
 
 	if *nextPath == "" {
-		fmt.Println("ERROR: -next image required")
+		fmt.Println("ERROR: -main image required")
 		os.Exit(1)
 	}
 	if *runSize != 16 && *runSize != 32 && *runSize != 64 {
@@ -144,7 +152,7 @@ func main() {
 	// ------------------------------------------------------------------
 	curPixels, w, h := loadImage(*nextPath)
 	hist := buildHistogram(curPixels, w, h)
-	pixelCount := w * h
+	pixelCount := int64(w * h)
 
 	// Print current image info before encoding (for debugging and analysis)
 	printImageInfo(*nextPath, hist, w, h)
@@ -166,10 +174,14 @@ func main() {
 	} else {
 		prevPixels = make([]uint16, pixelCount)
 		if *prevShift {
-			copy(prevPixels[w:], curPixels[:pixelCount-w])
+			copy(prevPixels[w:], curPixels[:pixelCount-int64(w)])
 			prevImageName = "prev(shifted)"
 		} else {
-			copy(prevPixels, curPixels)
+			// fill prevPixels with the specified color
+			fillColor := rgba8888_to_rgb565(uint32(*prevFill))
+			for i := range prevPixels {
+				prevPixels[i] = fillColor
+			}
 			prevImageName = "prev(filled)"
 		}
 	}
@@ -181,31 +193,31 @@ func main() {
 	// ------------------------------------------------------------------
 	// Build logical symbol streams
 	// ------------------------------------------------------------------
-	lineStream := fe.NewBitStreamWriter((h*1 + 7) / 8)              // pre-allocate output buffer
-	runStream := fe.NewBitStreamWriter((pixelCount*1 + 7) / 8)      // pre-allocate output buffer
-	selectorStream := fe.NewBitStreamWriter((pixelCount*2 + 7) / 8) // pre-allocate output buffer
+	lineStream := fe.NewBitStreamWriter(int64(h))                  // pre-allocate output buffer
+	runStream := fe.NewBitStreamWriter(int64(pixelCount * 1))      // pre-allocate output buffer
+	selectorStream := fe.NewBitStreamWriter(int64(pixelCount * 2)) // pre-allocate output buffer
 
-	p2NumPixels := 0
-	p4NumPixels := 0
-	p8NumPixels := 0
-	rawNumPixels := 0
+	p2NumPixels := int64(0)
+	p4NumPixels := int64(0)
+	p8NumPixels := int64(0)
+	rawNumPixels := int64(0)
 	for i, hc := range hist {
 		if i < 4 {
-			p2NumPixels += int(hc.colorCount)
+			p2NumPixels += int64(hc.colorCount)
 		} else if i < 20 {
-			p4NumPixels += int(hc.colorCount)
+			p4NumPixels += int64(hc.colorCount)
 		} else if i < 276 {
-			p8NumPixels += int(hc.colorCount)
+			p8NumPixels += int64(hc.colorCount)
 		} else {
-			rawNumPixels += int(hc.colorCount)
+			rawNumPixels += int64(hc.colorCount)
 		}
 	}
 
-	p0Stream := fe.NewBitStreamWriter((p2NumPixels*2 + 7) / 8) // pre-allocate output buffer
-	p1Stream := fe.NewBitStreamWriter((p4NumPixels*4 + 7) / 8) // pre-allocate output buffer
-	p2Stream := fe.NewBitStreamWriter((p8NumPixels*8 + 7) / 8) // pre-allocate output buffer
+	p0Stream := fe.NewBitStreamWriter(p2NumPixels * 2) // pre-allocate output buffer
+	p1Stream := fe.NewBitStreamWriter(p4NumPixels * 4) // pre-allocate output buffer
+	p2Stream := fe.NewBitStreamWriter(p8NumPixels * 8) // pre-allocate output buffer
 
-	rawPixelCount := pixelCount - p2NumPixels - p4NumPixels - p8NumPixels
+	rawPixelCount := int64(pixelCount) - p2NumPixels - p4NumPixels - p8NumPixels
 	rawStream := make([]uint16, 0, rawPixelCount) // raw pixel values for colors not in the palette
 
 	// The histogram is sorted, so color lookup will be incorrect.
@@ -273,12 +285,12 @@ func main() {
 	// ------------------------------------------------------------------
 	// encoding using SRLEN + BitStream
 	// ------------------------------------------------------------------
-	lineEncoded := fe.NewBitStreamWriter((lineStreamNumBits + 7) / 8)    // pre-allocate output buffer
-	runEncoded := fe.NewBitStreamWriter((runStreamNumBits + 7) / 8)      // pre-allocate output buffer
-	selEncoded := fe.NewBitStreamWriter((selectorStreamNumBits + 7) / 8) // pre-allocate output buffer
-	p0Encoded := fe.NewBitStreamWriter((p0StreamNumBits + 7) / 8)        // pre-allocate output buffer
-	p1Encoded := fe.NewBitStreamWriter((p1StreamNumBits + 7) / 8)        // pre-allocate output buffer
-	p2Encoded := fe.NewBitStreamWriter((p2StreamNumBits + 7) / 8)        // pre-allocate output buffer
+	lineEncoded := fe.NewBitStreamWriter(lineStreamNumBits)    // pre-allocate output buffer
+	runEncoded := fe.NewBitStreamWriter(runStreamNumBits)      // pre-allocate output buffer
+	selEncoded := fe.NewBitStreamWriter(selectorStreamNumBits) // pre-allocate output buffer
+	p0Encoded := fe.NewBitStreamWriter(p0StreamNumBits)        // pre-allocate output buffer
+	p1Encoded := fe.NewBitStreamWriter(p1StreamNumBits)        // pre-allocate output buffer
+	p2Encoded := fe.NewBitStreamWriter(p2StreamNumBits)        // pre-allocate output buffer
 
 	fe.Encode(lineStream.Reader(), 1, 2, lineEncoded)
 	fe.Encode(runStream.Reader(), 1, 2, runEncoded)
@@ -308,13 +320,13 @@ func main() {
 	fmt.Printf("P2       : %6d bytes (SRLEN)\n", (p2EncodedNumBits+7)/8)
 	fmt.Printf("RAW P3   : %6d bytes\n", len(rawStream)*2)
 
-	total := int((lineEncodedNumBits + 7) / 8)
+	total := int64((lineEncodedNumBits + 7) / 8)
 	total += (runEncodedNumBits + 7) / 8
 	total += (selEncodedNumBits + 7) / 8
 	total += (p0EncodedNumBits + 7) / 8
 	total += (p1EncodedNumBits + 7) / 8
 	total += (p2EncodedNumBits + 7) / 8
-	total += len(rawStream) * 2
+	total += int64(len(rawStream) * 2)
 
 	fmt.Printf("Total encoded: %d bytes (%.2fx)\n", total, float64(rawBytes)/float64(total))
 }

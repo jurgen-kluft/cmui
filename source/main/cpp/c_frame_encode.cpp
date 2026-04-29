@@ -303,6 +303,8 @@ namespace ncore
             const u32 encoded_size = sizeof(header_t) + s_number_of_bits_to_bytes(p2_bits) + s_number_of_bits_to_bytes(p4_bits) + s_number_of_bits_to_bytes(p8_bits) + s_number_of_bits_to_bytes(p16_bits) + s_number_of_bits_to_bytes(selector_bits) +
                                      s_number_of_bits_to_bytes(line_change_bits) + s_number_of_bits_to_bytes(run_change_bits);
 
+            // Some of the stream we are going to apply SRLE to it
+
             return encoded_size <= out_data_capacity ? (s32)encoded_size : -1;
         }
 

@@ -4,20 +4,20 @@ import "slices"
 
 type BitStreamWriter struct {
 	buf          []uint8 // buffer for bits being written
-	numBits      uint32  // total number of bits written
-	pos          uint32  // write byte position
+	numBits      int64   // total number of bits written
+	pos          int64   // write byte position
 	finalized    bool    // whether Finalize has been called
-	accuNumBits  int     // number of bits currently in the accumulator
+	accuNumBits  int32   // number of bits currently in the accumulator
 	accuRegister uint64  // accumulator for bits being written
 }
 
-func NewBitStreamWriter(sizeInBits int) *BitStreamWriter {
+func NewBitStreamWriter(sizeInBits int64) *BitStreamWriter {
 	bs := &BitStreamWriter{}
-	bs.SetCapacity(uint32(sizeInBits))
+	bs.SetCapacity(sizeInBits)
 	return bs
 }
 
-func (bs *BitStreamWriter) SetCapacity(sizeInBits uint32) {
+func (bs *BitStreamWriter) SetCapacity(sizeInBits int64) {
 	if len(bs.buf) == 0 {
 		bs.buf = make([]uint8, (sizeInBits+7)>>3)
 	} else {
@@ -36,7 +36,7 @@ func (bs *BitStreamWriter) WriteBits(v uint32, n uint8) {
 	// at which point we flush to the buffer.
 	// Note: This means that we cannot write more than 32 bits at a time!
 	bs.accuRegister |= uint64(v) << bs.accuNumBits
-	bs.accuNumBits += int(n)
+	bs.accuNumBits += int32(n)
 	if bs.accuNumBits >= 32 {
 		bs.buf[bs.pos] = uint8(bs.accuRegister & 0xFF)
 		bs.buf[bs.pos+1] = uint8((bs.accuRegister >> 8) & 0xFF)
@@ -46,10 +46,10 @@ func (bs *BitStreamWriter) WriteBits(v uint32, n uint8) {
 		bs.accuRegister >>= 32
 		bs.accuNumBits -= 32
 	}
-	bs.numBits += uint32(n)
+	bs.numBits += int64(n)
 }
 
-func (bs *BitStreamWriter) Finalize() (bitsWritten int) {
+func (bs *BitStreamWriter) Finalize() (bitsWritten int64) {
 
 	// Flush remaining bits in the accumulator to the buffer
 	for bs.accuNumBits > 0 {
@@ -63,7 +63,7 @@ func (bs *BitStreamWriter) Finalize() (bitsWritten int) {
 	bs.accuRegister = 0
 	bs.finalized = true
 
-	return int(bs.numBits)
+	return bs.numBits
 }
 
 func (bs *BitStreamWriter) Reader() *BitStreamReader {
@@ -76,14 +76,14 @@ func (bs *BitStreamWriter) Reader() *BitStreamReader {
 
 type BitStreamReader struct {
 	buf          []uint8
-	numBits      uint32
-	readBits     uint32
-	pos          uint32
-	accuNumBits  int
+	numBits      int64
+	readBits     int64
+	pos          int64
+	accuNumBits  int32
 	accuRegister uint64
 }
 
-func NewBitStreamReader(buf []uint8, numBits uint32) *BitStreamReader {
+func NewBitStreamReader(buf []uint8, numBits int64) *BitStreamReader {
 	return &BitStreamReader{
 		buf:     buf,
 		numBits: numBits,
@@ -98,13 +98,13 @@ func (bs *BitStreamReader) ResetRead() {
 }
 
 func (bs *BitStreamReader) ReadBits(n uint8) int32 {
-	if n == 0 || (bs.readBits+uint32(n)) > bs.numBits {
+	if n == 0 || (bs.readBits+int64(n)) > bs.numBits {
 		return -1
 	}
 
 	// Ensure we have more than 32 bits in the accumulator to read from, if not,
 	// read more bytes from the buffer.
-	for bs.accuNumBits < 32 && bs.pos < uint32(len(bs.buf)) {
+	for bs.accuNumBits < 32 && bs.pos < int64(len(bs.buf)) {
 		bs.accuRegister |= uint64(bs.buf[bs.pos]) << bs.accuNumBits
 		bs.accuNumBits += 8
 		bs.pos++
@@ -112,20 +112,20 @@ func (bs *BitStreamReader) ReadBits(n uint8) int32 {
 
 	v := uint32(bs.accuRegister & ((1 << n) - 1))
 	bs.accuRegister >>= n
-	bs.accuNumBits -= int(n)
+	bs.accuNumBits -= int32(n)
 
-	bs.readBits += uint32(n)
+	bs.readBits += int64(n)
 	return int32(v)
 }
 
 func (bs *BitStreamReader) PeekBits(n uint8) int32 {
-	if n == 0 || (bs.readBits+uint32(n)) > bs.numBits {
+	if n == 0 || (bs.readBits+int64(n)) > bs.numBits {
 		return -1
 	}
 
 	// Ensure we have more than 32 bits in the accumulator to read from, if not,
 	// read more bytes from the buffer.
-	for bs.accuNumBits < 32 && bs.pos < uint32(len(bs.buf)) {
+	for bs.accuNumBits < 32 && bs.pos < int64(len(bs.buf)) {
 		bs.accuRegister |= uint64(bs.buf[bs.pos]) << bs.accuNumBits
 		bs.accuNumBits += 8
 		bs.pos++
@@ -135,23 +135,23 @@ func (bs *BitStreamReader) PeekBits(n uint8) int32 {
 }
 
 func (bs *BitStreamReader) SkipBits(n uint8) {
-	if n == 0 || (bs.readBits+uint32(n)) > bs.numBits {
+	if n == 0 || (bs.readBits+int64(n)) > bs.numBits {
 		return
 	}
 
 	// Ensure we have more than 32 bits in the accumulator to skip from, if not,
 	// read more bytes from the buffer.
-	for bs.accuNumBits < 32 && bs.pos < uint32(len(bs.buf)) {
+	for bs.accuNumBits < 32 && bs.pos < int64(len(bs.buf)) {
 		bs.accuRegister |= uint64(bs.buf[bs.pos]) << bs.accuNumBits
 		bs.accuNumBits += 8
 		bs.pos++
 	}
 
 	bs.accuRegister >>= n
-	bs.accuNumBits -= int(n)
-	bs.readBits += uint32(n)
+	bs.accuNumBits -= int32(n)
+	bs.readBits += int64(n)
 }
 
 func (bs *BitStreamReader) IsReadEnd(sizeofSymbolInBits uint8) bool {
-	return bs.readBits >= bs.numBits || (bs.numBits-bs.readBits) < uint32(sizeofSymbolInBits)
+	return bs.readBits >= bs.numBits || (bs.numBits-bs.readBits) < int64(sizeofSymbolInBits)
 }
