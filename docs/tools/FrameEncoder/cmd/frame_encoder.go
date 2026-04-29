@@ -313,12 +313,12 @@ func main() {
 	fmt.Printf("Image: %dx%d (%d px)\n", w, h, pixelCount)
 	fmt.Printf("RAW RGB565: %d bytes\n", rawBytes)
 	fmt.Printf("P16      : %6d bytes\n", len(rawStream)*2)
-	fmt.Printf("P8       : %6d bytes -> %6d bytes (SRLEN)\n", (p2StreamNumBits+7)/8, (p2EncodedNumBits+7)/8)
-	fmt.Printf("P4       : %6d bytes -> %6d bytes (SRLEN)\n", (p1StreamNumBits+7)/8, (p1EncodedNumBits+7)/8)
-	fmt.Printf("P2       : %6d bytes -> %6d bytes (SRLEN)\n", (p0StreamNumBits+7)/8, (p0EncodedNumBits+7)/8)
-	fmt.Printf("Selector : %6d bytes -> %6d bytes (SRLEN)\n", (selectorStreamNumBits+7)/8, (selEncodedNumBits+7)/8)
-	fmt.Printf("Line     : %6d bytes -> %6d bytes (SRLEN)\n", (lineStreamNumBits+7)/8, (lineEncodedNumBits+7)/8)
-	fmt.Printf("Run      : %6d bytes -> %6d bytes (SRLEN)\n", (runStreamNumBits+7)/8, (runEncodedNumBits+7)/8)
+	fmt.Printf("P8       : %6d bytes -> %6d bytes (SRLEN, ratio %.2fx)\n", (p2StreamNumBits+7)/8, (p2EncodedNumBits+7)/8, float64((p2StreamNumBits+7)/8)/float64((p2EncodedNumBits+7)/8))
+	fmt.Printf("P4       : %6d bytes -> %6d bytes (SRLEN, ratio %.2fx)\n", (p1StreamNumBits+7)/8, (p1EncodedNumBits+7)/8, float64((p1StreamNumBits+7)/8)/float64((p1EncodedNumBits+7)/8))
+	fmt.Printf("P2       : %6d bytes -> %6d bytes (SRLEN, ratio %.2fx)\n", (p0StreamNumBits+7)/8, (p0EncodedNumBits+7)/8, float64((p0StreamNumBits+7)/8)/float64((p0EncodedNumBits+7)/8))
+	fmt.Printf("Selector : %6d bytes -> %6d bytes (SRLEN, ratio %.2fx)\n", (selectorStreamNumBits+7)/8, (selEncodedNumBits+7)/8, float64((selectorStreamNumBits+7)/8)/float64((selEncodedNumBits+7)/8))
+	fmt.Printf("Line     : %6d bytes -> %6d bytes (SRLEN, ratio %.2fx)\n", (lineStreamNumBits+7)/8, (lineEncodedNumBits+7)/8, float64((lineStreamNumBits+7)/8)/float64((lineEncodedNumBits+7)/8))
+	fmt.Printf("Run      : %6d bytes -> %6d bytes (SRLEN, ratio %.2fx)\n", (runStreamNumBits+7)/8, (runEncodedNumBits+7)/8, float64((runStreamNumBits+7)/8)/float64((runEncodedNumBits+7)/8))
 
 	total := int64((lineEncodedNumBits + 7) / 8)
 	total += (runEncodedNumBits + 7) / 8

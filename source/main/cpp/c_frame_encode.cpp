@@ -79,10 +79,22 @@ namespace ncore
         static inline u32 s_units_to_bytes(u32 units, u32 bits_per_unit) { return ((units * bits_per_unit) + 7) >> 3; }
         static inline u16 s_rgba888_to_rgb565(u32 rgba) { return ((rgba >> 8) & 0xf800) | ((rgba >> 5) & 0x07e0) | ((rgba >> 3) & 0x001f); }
 
-        s32 compress(u8 const* stream, u32 stream_size_in_bits, u8 symbol_bits, u8* out_stream)
+        static s32 s_compress(nrle::encoder_t& encoder, u8 const* stream, u32 stream_size_in_bits, u8 symbol_bits, u8* out_stream, u8* out_symbol_rb)
         {
-            // return number of bytes
-            return -1;
+            // size in bytes of the encoded stream, or a negative value on error
+            const s32 encoded_size = nrle::analyze_bits(&encoder, stream, stream_size_in_bits, symbol_bits);
+
+            nrle::out_t out_stream_info;
+            out_stream_info.m_data = out_stream;
+            out_stream_info.m_size = (stream_size_in_bits + 7) >> 3;  // We use the uncompressed size as the upper bound for the compressed size
+
+            nrle::header_t srle_header;
+            const s32      encoded_num_bits = nrle::encode_bits(&encoder, srle_header, out_stream_info);
+
+            for (i32 i = 0; i < (1 << symbol_bits); ++i)
+                out_symbol_rb[i] = srle_header.m_run_bits[i];
+
+            return encoded_size;
         }
 
         s32 move_data16(u16 const* stream, u32 count, u16* out_stream)
@@ -93,6 +105,12 @@ namespace ncore
 
         s32 encode_frame(encoder_t& encoder, header_t& out_hdr, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 run_length)
         {
+            // Initialize header
+            out_hdr.m_magic      = 0x4645;  // 'FE' in ASCII
+            out_hdr.m_width      = width;
+            out_hdr.m_height     = height;
+            out_hdr.m_run_length = run_length;
+
             // Initialize histogram and palette
 
             g_memory_fill(encoder.m_palette, 0, sizeof(encoder.m_palette));
@@ -166,15 +184,32 @@ namespace ncore
             const u32 line_change_stream_size_in_units = height;                                            // 1 bit per line, rounded up to the nearest byte
             const u32 run_change_stream_size_in_units  = ((width + run_length - 1) / run_length) * height;  // 1 bit per run, rounded up to the nearest byte
 
+            // Which one of the compressing streams is the largest, we will use this to introduce a gap into
+            // the output buffer here, so that once we start compressing we can make sure we are not overwriting
+            // any data that we still need to read.
+            u32 max_stream_size_in_bytes = p16_stream_size_in_units * 2;
+            if (p8_stream_size_in_units > max_stream_size_in_bytes)
+                max_stream_size_in_bytes = p8_stream_size_in_units;
+            if (p4_stream_size_in_units * 4 > max_stream_size_in_bytes)
+                max_stream_size_in_bytes = p4_stream_size_in_units * 4;
+            if (p2_stream_size_in_units * 2 > max_stream_size_in_bytes)
+                max_stream_size_in_bytes = p2_stream_size_in_units * 2;
+            if (selector_stream_size_in_units * 2 > max_stream_size_in_bytes)
+                max_stream_size_in_bytes = selector_stream_size_in_units * 2;
+            if (line_change_stream_size_in_units > max_stream_size_in_bytes)
+                max_stream_size_in_bytes = line_change_stream_size_in_units;
+            if (run_change_stream_size_in_units > max_stream_size_in_bytes)
+                max_stream_size_in_bytes = run_change_stream_size_in_units;
+
             // Setup pointers for each stream, using out_data as a contiguous block of memory for all streams
-            header_t* header                 = &out_hdr;  // Header is given by the caller
-            u8*       p16_stream_ptr         = out_data;
-            u8*       p8_stream_ptr          = p16_stream_ptr + s_units_to_bytes(p16_stream_size_in_units, 16);
-            u8*       p4_stream_ptr          = p8_stream_ptr + s_units_to_bytes(p8_stream_size_in_units, 8);
-            u8*       p2_stream_ptr          = p4_stream_ptr + s_units_to_bytes(p4_stream_size_in_units, 4);
-            u8*       selector_stream_ptr    = p2_stream_ptr + s_units_to_bytes(p2_stream_size_in_units, 2);
-            u8*       line_change_stream_ptr = selector_stream_ptr + s_units_to_bytes(selector_stream_size_in_units, 2);
-            u8*       run_change_stream_ptr  = line_change_stream_ptr + s_units_to_bytes(line_change_stream_size_in_units, 1);
+            u8* p16_stream_ptr = out_data;
+            u8* p8_stream_ptr  = p16_stream_ptr + s_units_to_bytes(p16_stream_size_in_units, 16);
+            p8_stream_ptr += max_stream_size_in_bytes;
+            u8* p4_stream_ptr          = p8_stream_ptr + s_units_to_bytes(p8_stream_size_in_units, 8);
+            u8* p2_stream_ptr          = p4_stream_ptr + s_units_to_bytes(p4_stream_size_in_units, 4);
+            u8* selector_stream_ptr    = p2_stream_ptr + s_units_to_bytes(p2_stream_size_in_units, 2);
+            u8* line_change_stream_ptr = selector_stream_ptr + s_units_to_bytes(selector_stream_size_in_units, 2);
+            u8* run_change_stream_ptr  = line_change_stream_ptr + s_units_to_bytes(line_change_stream_size_in_units, 1);
 
             // Verify output capacity for the worst-case layout.
             u8* const out_data_end = run_change_stream_ptr + s_units_to_bytes(run_change_stream_size_in_units, 1);
@@ -185,11 +220,11 @@ namespace ncore
             g_memory_fill(p2_stream_ptr, 0, (u32)(out_data_end - p2_stream_ptr));
 
             // Initialize header
-            init_header(*header, width, height, run_length);
+            init_header(out_hdr, width, height, run_length);
 
             // Copy palette to header for decoding.
             for (u32 i = 0; i < 276; ++i)
-                header->m_palette[i] = encoder.m_palette[i];
+                out_hdr.m_palette[i] = encoder.m_palette[i];
 
             // Build RGB565 -> palette index map: 0..275 for palette entries, -1 for raw.
             for (u32 i = 0; i < 65536; ++i)
@@ -282,18 +317,18 @@ namespace ncore
                 nbitstream::write_bits(&line_change_writer, line_changed ? 1u : 0u, 1);
             }
 
-            const u32 p2_units          = nbitstream::finalize(&p2_writer) / 2;
-            const u32 p4_units          = nbitstream::finalize(&p4_writer) / 4;
-            const u32 p8_units          = nbitstream::finalize(&p8_writer) / 8;
             const u32 p16_units         = nbitstream::finalize(&p16_writer) / 16;
+            const u32 p8_units          = nbitstream::finalize(&p8_writer) / 8;
+            const u32 p4_units          = nbitstream::finalize(&p4_writer) / 4;
+            const u32 p2_units          = nbitstream::finalize(&p2_writer) / 2;
             const u32 selector_units    = nbitstream::finalize(&selector_writer) / 2;
             const u32 line_change_units = nbitstream::finalize(&line_change_writer) / 1;
             const u32 run_change_units  = nbitstream::finalize(&run_change_writer) / 1;
 
-            ASSERT(p2_units == p2_stream_size_in_units);
-            ASSERT(p4_units == p4_stream_size_in_units);
-            ASSERT(p8_units == p8_stream_size_in_units);
             ASSERT(p16_units == p16_stream_size_in_units);
+            ASSERT(p8_units == p8_stream_size_in_units);
+            ASSERT(p4_units == p4_stream_size_in_units);
+            ASSERT(p2_units == p2_stream_size_in_units);
             ASSERT(selector_units == selector_stream_size_in_units);
             ASSERT(line_change_units == line_change_stream_size_in_units);
             ASSERT(run_change_units == run_change_stream_size_in_units);
@@ -301,34 +336,33 @@ namespace ncore
             // Some of the stream we are going to apply SRLE to it and this will result in all of the streams either
             // being the same size or smaller.
             // So we will start to re-compute the location of all the streams one by one.
+            nrle::encoder_t srle_encoder;
 
             u8* p16_stream_ptr_srle          = out_data;
-            u32 p16_stream_srle_size         = p16_units; // p16 already exists here and we are not compressing it
+            u32 p16_stream_srle_size         = p16_units;  // p16 already exists here and we are not compressing it
             u8* p8_stream_ptr_srle           = p16_stream_ptr_srle + p16_stream_srle_size;
-            u32 p8_stream_srle_size          = compress(p8_stream_ptr, p8_units, 8, p8_stream_ptr_srle);
+            u32 p8_stream_srle_size          = s_compress(srle_encoder, p8_stream_ptr, p8_units, 8, p8_stream_ptr_srle, out_hdr.m_p8_rb);
             u8* p4_stream_ptr_srle           = p8_stream_ptr_srle + p8_stream_srle_size;
-            u32 p4_stream_srle_size          = compress(p4_stream_ptr, p4_units, 4, p4_stream_ptr_srle);
+            u32 p4_stream_srle_size          = s_compress(srle_encoder, p4_stream_ptr, p4_units, 4, p4_stream_ptr_srle, out_hdr.m_p4_rb);
             u8* p2_stream_ptr_srle           = p4_stream_ptr_srle + p4_stream_srle_size;
-            u32 p2_stream_srle_size          = compress(p2_stream_ptr, p2_units, 2, p2_stream_ptr_srle);
+            u32 p2_stream_srle_size          = s_compress(srle_encoder, p2_stream_ptr, p2_units, 2, p2_stream_ptr_srle, out_hdr.m_p2_rb);
             u8* selector_stream_ptr_srle     = p2_stream_ptr_srle + p2_stream_srle_size;
-            u32 selector_stream_srle_size    = compress(selector_stream_ptr, selector_units, 2, selector_stream_ptr_srle);
+            u32 selector_stream_srle_size    = s_compress(srle_encoder, selector_stream_ptr, selector_units, 2, selector_stream_ptr_srle, out_hdr.m_selector_rb);
             u8* line_change_stream_ptr_srle  = selector_stream_ptr_srle + selector_stream_srle_size;
-            u32 line_change_stream_srle_size = compress(line_change_stream_ptr, line_change_units, 2, line_change_stream_ptr_srle);
+            u32 line_change_stream_srle_size = s_compress(srle_encoder, line_change_stream_ptr, line_change_units, 2, line_change_stream_ptr_srle, out_hdr.m_line_change_rb);
             u8* run_change_stream_ptr_srle   = line_change_stream_ptr_srle + line_change_stream_srle_size;
-            u32 run_change_stream_srle_size  = compress(run_change_stream_ptr, run_change_units, 1, run_change_stream_ptr_srle);
+            u32 run_change_stream_srle_size  = s_compress(srle_encoder, run_change_stream_ptr, run_change_units, 1, run_change_stream_ptr_srle, out_hdr.m_run_change_rb);
 
             const u32 encoded_size = p16_stream_srle_size + p8_stream_srle_size + p4_stream_srle_size + p2_stream_srle_size + selector_stream_srle_size + line_change_stream_srle_size + run_change_stream_srle_size;
 
             // Fill in the header
-            out_hdr.m_magic                            = 0x464d5245;  // 'FRME' in ASCII
-
-            out_hdr.m_p16_encoded_size                 = p16_stream_srle_size;
-            out_hdr.m_p8_encoded_size                  = p8_stream_srle_size;
-            out_hdr.m_p4_encoded_size                  = p4_stream_srle_size;
-            out_hdr.m_p2_encoded_size                  = p2_stream_srle_size;
-            out_hdr.m_selector_encoded_size            = selector_stream_srle_size;
-            out_hdr.m_line_change_encoded_size         = line_change_stream_srle_size;
-            out_hdr.m_run_change_encoded_size          = run_change_stream_srle_size;
+            out_hdr.m_p16_encoded_size         = p16_stream_srle_size;
+            out_hdr.m_p8_encoded_size          = p8_stream_srle_size;
+            out_hdr.m_p4_encoded_size          = p4_stream_srle_size;
+            out_hdr.m_p2_encoded_size          = p2_stream_srle_size;
+            out_hdr.m_selector_encoded_size    = selector_stream_srle_size;
+            out_hdr.m_line_change_encoded_size = line_change_stream_srle_size;
+            out_hdr.m_run_change_encoded_size  = run_change_stream_srle_size;
 
             out_hdr.m_p16_stream_decoded_units         = p16_units;
             out_hdr.m_p8_stream_decoded_units          = p8_units;
@@ -337,10 +371,6 @@ namespace ncore
             out_hdr.m_selector_stream_decoded_units    = selector_units;
             out_hdr.m_line_change_stream_decoded_units = line_change_units;
             out_hdr.m_run_change_stream_decoded_units  = run_change_units;
-
-            out_hdr.m_width                            = width;
-            out_hdr.m_height                           = height;
-            out_hdr.m_run_length                       = run_length;
 
             return encoded_size <= out_data_capacity ? (s32)encoded_size : -1;
         }

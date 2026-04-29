@@ -21,8 +21,8 @@ namespace ncore
 
         struct out_t
         {
-            u8* m_data;
-            u32 m_size;
+            u8* m_data;  // pointer to the output buffer
+            u32 m_size;  // size of the output buffer in bytes
         };
 
         struct header_t
@@ -58,6 +58,10 @@ namespace ncore
         // symbol_bits can be 1, 2, 4 or 8, and determines the size of each symbol in bits
         // note: caller is responsible for ensuring that the output buffer is large enough to hold
         //       the encoded data
+        // note: do not encode to memory that is within the input data range, as the encoding process
+        //       may overwrite data that has not yet been read. The writing output behaviour is far
+        //       from linear and at the start can write a lot of data and at the end suddenly a lot of
+        //       compression can happen.
         s32 encode_bits(encoder_t const* enc, header_t& out_header, out_t& out_encoded);
 
         inline s32 decoded_size(const header_t* header) { return (s32)header->m_decoded_size_in_bits; }
