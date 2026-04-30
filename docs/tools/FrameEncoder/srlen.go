@@ -59,7 +59,8 @@ func (h *runHist) bestRb() uint8 {
 // Encode takes a stream of symbols and encodes it using the SRLEN algorithm.
 // User needs to provide the symbol size in bits and the alphabet size (number of distinct symbols), as
 // well as an output BitStreamWriter with enough capacity to hold the encoded data.
-func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, numberOfSymbols int32, out *BitStreamWriter) (rb []uint8, err error) {
+func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, out *BitStreamWriter) (rb []uint8, err error) {
+	numberOfSymbols := int32(1 << sizeofSymbolInBits)
 	hists := make([]*runHist, numberOfSymbols)
 	for i := range numberOfSymbols {
 		hists[i] = newRunHist(sizeofSymbolInBits)

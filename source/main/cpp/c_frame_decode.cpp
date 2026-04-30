@@ -19,6 +19,7 @@ namespace ncore
             // u8*       line_change_stream_ptr =
             // u8*       run_change_stream_ptr  =
 
+            return -1;
         }
 
     }  // namespace nmui

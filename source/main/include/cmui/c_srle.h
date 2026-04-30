@@ -14,9 +14,12 @@ namespace ncore
         // ---- Encoder / decoder ----
         // This is a 'selective run-length encoding' (SRLE) algorithm that encodes runs of repeated
         // symbols, and each symbol is assigned 'run bits' used to encode the run length.
-        // So before encoding, the input data is analyzed to determine the optimal 'run bits' for
-        // each symbol, which are then stored in the header of the encoded bitstream.
-        // During decoding, the header is read to reconstruct the symbol information and decode
+        // Before encoding, the input data is analyzed to determine the optimal 'run bits' for
+        // each symbol, which are then stored in the header of the encoded bitstream. One of the
+        // main benefits of this approach is that the encoded result will never be larger than the
+        // original data, as the 'run bits' for each symbol can be set to 0 (raw mode) if that
+        // symbol does not have enough runs to benefit from run-length encoding.
+        // During decoding, a header is needed to supply the symbol information and decode
         // the bitstream accordingly.
 
         struct out_t
@@ -27,7 +30,7 @@ namespace ncore
 
         struct header_t
         {
-            u32 m_decoded_size_in_bits;  // size of the decoded bitstream in bits
+            u32 m_decoded_size_in_units;  // size of the decoded bitstream in units (unit = symbol)
             u32 m_symbol_bits;           // number of bits used to encode each symbol (1, 2, 4 or 8)
             u8  m_run_bits[256];         // per symbol run-bits (actual size = 2^symbol_bits)
         };
@@ -64,7 +67,7 @@ namespace ncore
         //       compression can happen.
         s32 encode_bits(encoder_t const* enc, header_t& out_header, out_t& out_encoded);
 
-        inline s32 decoded_size(const header_t* header) { return (s32)header->m_decoded_size_in_bits; }
+        inline u32 decoded_size(const header_t* header) { return (s32)(header->m_decoded_size_in_units * header->m_symbol_bits); }
         inline s32 symbol_rb(const header_t* hdr, u8 symbol) { return (symbol < (1U << hdr->m_symbol_bits)) ? (s32)hdr->m_run_bits[symbol] : -1; }
 
         struct decoder_t

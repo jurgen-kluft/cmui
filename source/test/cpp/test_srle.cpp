@@ -76,7 +76,7 @@ UNITTEST_SUITE_BEGIN(srle)
             const s32      encoded_bits = nrle::encode_bits(&encoder, header, encoded_out);
 
             CHECK_EQUAL((s32)data_bits, encoded_bits);
-            CHECK_EQUAL((s32)data_bits, nrle::decoded_size(&header));
+            CHECK_EQUAL(data_bits, nrle::decoded_size(&header));
             CHECK_EQUAL(0, nrle::symbol_rb(&header, 0));
             CHECK_EQUAL(0, nrle::symbol_rb(&header, 1));
             CHECK_EQUAL(-1, nrle::symbol_rb(&header, 4));
@@ -105,7 +105,7 @@ UNITTEST_SUITE_BEGIN(srle)
 
             nrle::encoder_t encoder = {};
             const u32 expected_encoded_size = ((2 + 5) + (2 + 5) + 2 + 2 + 2 + (2 + 5) + 7) / 8;
-            CHECK_EQUAL(expected_encoded_size, nrle::analyze_bits(&encoder, source, data_bits, 2));
+            CHECK_EQUAL(expected_encoded_size, (u32)nrle::analyze_bits(&encoder, source, data_bits, 2));
             CHECK_EQUAL(0, encoder.m_symbol_rb[0]);
             CHECK_EQUAL(0, encoder.m_symbol_rb[1]);
             CHECK_EQUAL(5, encoder.m_symbol_rb[2]);

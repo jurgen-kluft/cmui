@@ -41,7 +41,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	input.Finalize()
 
 	encoded := NewBitStreamWriter(int64(len(inputSymbols) * int(symbolBits) * 2))
-	rb, err := Encode(input.Reader(), symbolBits, numberOfSymbols, encoded)
+	rb, err := Encode(input.Reader(), symbolBits, encoded)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestEncodeCompressesAndRoundTrips(t *testing.T) {
 
 	// Encode – allocate a generous output buffer; we'll measure actual bits used.
 	encoded := NewBitStreamWriter(int64(rawBits * 2))
-	rb, err := Encode(input.Reader(), symbolBits, numberOfSyms, encoded)
+	rb, err := Encode(input.Reader(), symbolBits, encoded)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}

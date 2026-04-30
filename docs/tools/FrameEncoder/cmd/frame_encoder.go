@@ -292,12 +292,12 @@ func main() {
 	p1Encoded := fe.NewBitStreamWriter(p1StreamNumBits)        // pre-allocate output buffer
 	p2Encoded := fe.NewBitStreamWriter(p2StreamNumBits)        // pre-allocate output buffer
 
-	fe.Encode(lineStream.Reader(), 1, 2, lineEncoded)
-	fe.Encode(runStream.Reader(), 1, 2, runEncoded)
-	fe.Encode(selectorStream.Reader(), 2, 4, selEncoded)
-	fe.Encode(p0Stream.Reader(), 2, 4, p0Encoded)
-	fe.Encode(p1Stream.Reader(), 4, 16, p1Encoded)
-	fe.Encode(p2Stream.Reader(), 8, 256, p2Encoded)
+	fe.Encode(lineStream.Reader(), 1, lineEncoded)
+	fe.Encode(runStream.Reader(), 1, runEncoded)
+	fe.Encode(selectorStream.Reader(), 2, selEncoded)
+	fe.Encode(p0Stream.Reader(), 2, p0Encoded)
+	fe.Encode(p1Stream.Reader(), 4, p1Encoded)
+	fe.Encode(p2Stream.Reader(), 8, p2Encoded)
 
 	lineEncodedNumBits := lineEncoded.Finalize()
 	runEncodedNumBits := runEncoded.Finalize()

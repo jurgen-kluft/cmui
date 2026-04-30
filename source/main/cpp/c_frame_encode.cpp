@@ -88,8 +88,12 @@ namespace ncore
             out_stream_info.m_data = out_stream;
             out_stream_info.m_size = (stream_size_in_bits + 7) >> 3;  // We use the uncompressed size as the upper bound for the compressed size
 
+            ASSERT(stream_size_in_bits <= (u32)(encoded_size * 8));  // Compression should not increase the size
+
             nrle::header_t srle_header;
             const s32      encoded_num_bits = nrle::encode_bits(&encoder, srle_header, out_stream_info);
+
+            ASSERT(encoded_num_bits == encoded_size * 8);  // The encoded size in bits should match the size calculated during analysis
 
             for (i32 i = 0; i < (1 << symbol_bits); ++i)
                 out_symbol_rb[i] = srle_header.m_run_bits[i];
@@ -123,7 +127,7 @@ namespace ncore
 
             for (u32 y = 0; y < height; ++y)
             {
-                u32 const* previous_img_row    = previous_img + y * width;
+                //u32 const* previous_img_row    = previous_img + y * width;
                 u32 const* current_img_row     = current_img + y * width;
                 u32 const* current_img_row_end = current_img_row + width;
                 while (current_img_row < current_img_row_end)
