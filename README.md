@@ -2,13 +2,25 @@
 
 State: WIP
 
-Remote UI Server for ESP32 microcontrollers, running a software 2D renderer. The server compresses the frame to efficiently update the display on the client side, sending minimum amount of data. Communication between the server and clients is done using a simple TCP protocol, allowing for low latency and high throughput.
+Remote UI Server for ESP32 microcontrollers, running a software 2D renderer. The server compresses the frame to efficiently update the display on the client side, sending minimum amount of data. 
+
+Communication between the server and clients is done using a simple TCP protocol, allowing for low latency and high throughput.
+
+[ ] Load UI description, `UI.json`
+[ ] Loading necessary paks
+[ ] Client-Server
+[ ] Communication Protocol
+[x] 2D Rendering (lines, rectangles, circles, sprites)
+[ ] Font Rendering
+[x] Frame Compression
 
 ## Features
 
+- Clients are ESP32 based devices, preferably an ESP32-S3 with 8MiB of PSRAM
 - TCP based communication (ctx, simple) protocol for low latency and high throughput
-- Clients are ESP32 based devices
-- Block based frame-buffer diff engine for efficiently updating the UI display on the client
+- Frame-buffer delta (previous, current) compressor for efficiently updating the UI display on the client side
+- 2D rendering capabilities (lines, rectangles, circles, sprites)
+- Font rendering support
 
 ## 2D rendering with cgx2
 

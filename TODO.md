@@ -1,7 +1,9 @@
 # TODO
 
 - Implement Frame Encoder
-  - Use SRLEN to encode line, run, selector and P2, P4 and P8 streams
+  - Need to add unittests for Frame Encoder
 - Implement Frame Decoder
+  - Frame decoder is very very simple
+  - Need to add unittests for Frame Decoder
 
 
