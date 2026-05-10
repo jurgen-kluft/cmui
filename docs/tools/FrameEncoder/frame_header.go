@@ -53,25 +53,12 @@ type FrameHeader struct {
 	P4RunBits                    []uint8 // 16 elements
 	P2RunBits                    []uint8 // 4 elements
 	SelectorRunBits              []uint8 // 4 elements
-	SpanChangeRunBits            []uint8 // 2 elements
 	TileChangeRunBits            []uint8 // 2 elements
 	LineChangeRunBits            []uint8 // 2 elements
 	Reserved0                    uint16
 	Palette                      []uint16 // 276 elements (4 colors for P2, 16 colors for P4, 256 colors for P8)
-	P16EncodedSize               uint32
-	P8EncodedSize                uint32
-	P4EncodedSize                uint32
-	P2EncodedSize                uint32
-	SelectorEncodedSize          uint32
-	SpanChangeEncodedSize        uint32
 	TileChangeEncodedSize        uint32
 	LineChangeEncodedSize        uint32
-	P16StreamDecodedUnits        uint32
-	P8StreamDecodedUnits         uint32
-	P4StreamDecodedUnits         uint32
-	P2StreamDecodedUnits         uint32
-	SelectorStreamDecodedUnits   uint32
-	SpanChangeStreamDecodedUnits uint32
 	TileChangeStreamDecodedUnits uint32
 	LineChangeStreamDecodedUnits uint32
 }
@@ -90,36 +77,6 @@ func (fh *FrameHeader) SetImgDimensions(width, height uint16) {
 func (fh *FrameHeader) SetTileDimensions(tileWidth, tileHeight uint8) {
 	fh.TileWidth = tileWidth
 	fh.TileHeight = tileHeight
-}
-
-func (fh *FrameHeader) SetP8(runBits []uint8, encodedNumBytes uint32, decodedUnits uint32) {
-	fh.P8RunBits = runBits[:256] // Ensure we only take the first 256 elements
-	fh.P8EncodedSize = encodedNumBytes
-	fh.P8StreamDecodedUnits = decodedUnits
-}
-
-func (fh *FrameHeader) SetP4(runBits []uint8, encodedSize uint32, decodedUnits uint32) {
-	fh.P4RunBits = runBits
-	fh.P4EncodedSize = encodedSize
-	fh.P4StreamDecodedUnits = decodedUnits
-}
-
-func (fh *FrameHeader) SetP2(runBits []uint8, encodedSize uint32, decodedUnits uint32) {
-	fh.P2RunBits = runBits
-	fh.P2EncodedSize = encodedSize
-	fh.P2StreamDecodedUnits = decodedUnits
-}
-
-func (fh *FrameHeader) SetSelector(runBits []uint8, encodedSize uint32, decodedUnits uint32) {
-	fh.SelectorRunBits = runBits
-	fh.SelectorEncodedSize = encodedSize
-	fh.SelectorStreamDecodedUnits = decodedUnits
-}
-
-func (fh *FrameHeader) SetSpanChange(runBits []uint8, encodedSize uint32, decodedUnits uint32) {
-	fh.SpanChangeRunBits = runBits
-	fh.SpanChangeEncodedSize = encodedSize
-	fh.SpanChangeStreamDecodedUnits = decodedUnits
 }
 
 func (fh *FrameHeader) SetTileChange(runBits []uint8, encodedSize uint32, decodedUnits uint32) {
@@ -151,29 +108,13 @@ func (fh *FrameHeader) WriteBinary(dst bytes.Buffer) {
 	binary.Write(&dst, binary.LittleEndian, fh.P4RunBits)
 	binary.Write(&dst, binary.LittleEndian, fh.P2RunBits)
 	binary.Write(&dst, binary.LittleEndian, fh.SelectorRunBits)
-	binary.Write(&dst, binary.LittleEndian, fh.SpanChangeRunBits)
 	binary.Write(&dst, binary.LittleEndian, fh.TileChangeRunBits)
 	binary.Write(&dst, binary.LittleEndian, fh.LineChangeRunBits)
-
 	binary.Write(&dst, binary.LittleEndian, fh.Reserved0)
-
 	binary.Write(&dst, binary.LittleEndian, fh.Palette)
 
-	binary.Write(&dst, binary.LittleEndian, fh.P16EncodedSize)
-	binary.Write(&dst, binary.LittleEndian, fh.P8EncodedSize)
-	binary.Write(&dst, binary.LittleEndian, fh.P4EncodedSize)
-	binary.Write(&dst, binary.LittleEndian, fh.P2EncodedSize)
-	binary.Write(&dst, binary.LittleEndian, fh.SelectorEncodedSize)
-	binary.Write(&dst, binary.LittleEndian, fh.SpanChangeEncodedSize)
 	binary.Write(&dst, binary.LittleEndian, fh.TileChangeEncodedSize)
 	binary.Write(&dst, binary.LittleEndian, fh.LineChangeEncodedSize)
-
-	binary.Write(&dst, binary.LittleEndian, fh.P16StreamDecodedUnits)
-	binary.Write(&dst, binary.LittleEndian, fh.P8StreamDecodedUnits)
-	binary.Write(&dst, binary.LittleEndian, fh.P4StreamDecodedUnits)
-	binary.Write(&dst, binary.LittleEndian, fh.P2StreamDecodedUnits)
-	binary.Write(&dst, binary.LittleEndian, fh.SelectorStreamDecodedUnits)
-	binary.Write(&dst, binary.LittleEndian, fh.SpanChangeStreamDecodedUnits)
 	binary.Write(&dst, binary.LittleEndian, fh.TileChangeStreamDecodedUnits)
 	binary.Write(&dst, binary.LittleEndian, fh.LineChangeStreamDecodedUnits)
 }
