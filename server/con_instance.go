@@ -33,8 +33,8 @@ type ConnectionInstance struct {
 type MessageType int
 
 const (
-	MessageTypeFrameUpdate MessageType = iota
-	MessageTypeInputEvent
+	MessageTypeFrameUpdate MessageType = 1
+	MessageTypeInputEvent  MessageType = 2
 )
 
 // HandleConnection runs in a go-routine and manages
@@ -77,18 +77,18 @@ func (ci *ConnectionInstance) HandleConnection() {
 }
 
 // Input message formats:
-// - Touch event: [MessageTypeInputEvent, InputTypeTouch(byte), x(int), y(int)]
-// - Swipe event: [MessageTypeInputEvent, InputTypeSwipe(byte), direction(int), distance(int)]
-// - Button event: [MessageTypeInputEvent, InputTypeButton(byte), buttonId(int), state(int)]
-// - Rotary event: [MessageTypeInputEvent, InputTypeRotary(byte), rotation(int)]
+// - Touch event: [MessageTypeInputEvent(byte), InputTypeTouch(byte), x(int16), y(int16)]
+// - Swipe event: [MessageTypeInputEvent(byte), InputTypeSwipe(byte), direction(int8), distance(int16)]
+// - Button event: [MessageTypeInputEvent(byte), InputTypeButton(byte), buttonId(int16), state(int16)]
+// - Rotary event: [MessageTypeInputEvent(byte), InputTypeRotary(byte), rotation(int32)]
 
 type InputType byte
 
 const (
-	InputTypeTouch InputType = iota
-	InputTypeSwipe
-	InputTypeButton
-	InputTypeRotary
+	InputTypeTouch  InputType = 1
+	InputTypeSwipe  InputType = 2
+	InputTypeButton InputType = 3
+	InputTypeRotary InputType = 4
 )
 
 func (ci *ConnectionInstance) handleInputEvent(data []byte) {
@@ -98,18 +98,18 @@ func (ci *ConnectionInstance) handleInputEvent(data []byte) {
 
 	switch InputType(inputType) {
 	case InputTypeTouch:
-		x := int(binary.LittleEndian.Uint32(data[1:5])) // Read x coordinate (4 bytes)
-		y := int(binary.LittleEndian.Uint32(data[5:9])) // Read y coordinate (4 bytes)
+		x := int(binary.LittleEndian.Uint16(data[1:3])) // Read x coordinate (2 bytes)
+		y := int(binary.LittleEndian.Uint16(data[3:5])) // Read y coordinate (2 bytes)
 		ci.uiInstance.OnTouch(x, y)
 
 	case InputTypeSwipe:
-		direction := int(binary.LittleEndian.Uint32(data[1:5])) // Read direction (4 bytes)
-		distance := int(binary.LittleEndian.Uint32(data[5:9]))  // Read distance (4 bytes)
+		direction := int(int8(data[1]))                        // Read direction (1 byte)
+		distance := int(binary.LittleEndian.Uint16(data[2:4])) // Read distance (2 bytes)
 		ci.uiInstance.OnSwipe(direction, distance)
 
 	case InputTypeButton:
-		buttonId := int(binary.LittleEndian.Uint32(data[1:5])) // Read button ID (4 bytes)
-		state := int(binary.LittleEndian.Uint32(data[5:9]))    // Read button state (4 bytes)
+		buttonId := int(binary.LittleEndian.Uint16(data[1:3])) // Read button ID (2 bytes)
+		state := int(binary.LittleEndian.Uint16(data[3:5]))    // Read button state (2 bytes)
 		ci.uiInstance.OnButton(buttonId, state)
 
 	case InputTypeRotary:

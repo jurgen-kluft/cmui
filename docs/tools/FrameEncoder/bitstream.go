@@ -1,4 +1,4 @@
-package srlen
+package frameencoder
 
 import "slices"
 
@@ -28,6 +28,15 @@ func (bs *BitStreamWriter) SetCapacity(sizeInBits int64) {
 	}
 }
 
+func (bs *BitStreamWriter) TestBit(bitPos int32) bool {
+	bytePos := bitPos >> 3
+	bitOffset := uint8(bitPos & 7)
+	if bytePos >= int32(len(bs.buf)) {
+		return false
+	}
+	return (bs.buf[bytePos] & (1 << bitOffset)) != 0
+}
+
 func (bs *BitStreamWriter) WriteBits(v uint32, n uint8) {
 	if n == 0 || bs.finalized {
 		return
@@ -49,7 +58,7 @@ func (bs *BitStreamWriter) WriteBits(v uint32, n uint8) {
 	bs.numBits += int64(n)
 }
 
-func (bs *BitStreamWriter) Finalize() (bitsWritten int64) {
+func (bs *BitStreamWriter) Finalize() (bitsWritten int64, bytesStored int64) {
 
 	// Flush remaining bits in the accumulator to the buffer
 	for bs.accuNumBits > 0 {
@@ -63,11 +72,11 @@ func (bs *BitStreamWriter) Finalize() (bitsWritten int64) {
 	bs.accuRegister = 0
 	bs.finalized = true
 
-	return bs.numBits
+	return bs.numBits, bs.pos
 }
 
 func (bs *BitStreamWriter) Reader() *BitStreamReader {
-	return NewBitStreamReader(bs.buf, bs.numBits)
+	return NewBitStreamReader(bs.buf, int32(bs.numBits))
 }
 
 // -------------------------------------------------------------
@@ -76,14 +85,14 @@ func (bs *BitStreamWriter) Reader() *BitStreamReader {
 
 type BitStreamReader struct {
 	buf          []uint8
-	numBits      int64
-	readBits     int64
-	pos          int64
-	accuNumBits  int32
-	accuRegister uint64
+	numBits      int32
+	readBits     int32
+	pos          int32  // byte position in buf
+	accuNumBits  int16  // number of bits currently in the accumulator
+	accuRegister uint64 // accumulator for bits being read
 }
 
-func NewBitStreamReader(buf []uint8, numBits int64) *BitStreamReader {
+func NewBitStreamReader(buf []uint8, numBits int32) *BitStreamReader {
 	return &BitStreamReader{
 		buf:     buf,
 		numBits: numBits,
@@ -97,61 +106,52 @@ func (bs *BitStreamReader) ResetRead() {
 	bs.accuRegister = 0
 }
 
-func (bs *BitStreamReader) ReadBits(n uint8) int32 {
-	if n == 0 || (bs.readBits+int64(n)) > bs.numBits {
-		return -1
-	}
+func (bs *BitStreamReader) CurrentBytePos() int32 {
+	return bs.pos
+}
 
-	// Ensure we have more than 32 bits in the accumulator to read from, if not,
-	// read more bytes from the buffer.
-	for bs.accuNumBits < 32 && bs.pos < int64(len(bs.buf)) {
+func (bs *BitStreamReader) checkAccumulator(n uint8) {
+	// Ensure we have enough bits in the accumulator to satisfy the current read.
+	for bs.accuNumBits < int16(n) && bs.pos < int32(len(bs.buf)) {
 		bs.accuRegister |= uint64(bs.buf[bs.pos]) << bs.accuNumBits
 		bs.accuNumBits += 8
 		bs.pos++
 	}
+}
 
-	v := uint32(bs.accuRegister & ((1 << n) - 1))
+func (bs *BitStreamReader) ReadBits(n uint8) int32 {
+	if n == 0 || (bs.readBits+int32(n)) > bs.numBits {
+		return -1
+	}
+
+	bs.checkAccumulator(n)
+	v := uint32(bs.accuRegister & ((uint64(1) << n) - 1))
 	bs.accuRegister >>= n
-	bs.accuNumBits -= int32(n)
+	bs.accuNumBits -= int16(n)
 
-	bs.readBits += int64(n)
+	bs.readBits += int32(n)
 	return int32(v)
 }
 
 func (bs *BitStreamReader) PeekBits(n uint8) int32 {
-	if n == 0 || (bs.readBits+int64(n)) > bs.numBits {
+	if n == 0 || (bs.readBits+int32(n)) > bs.numBits {
 		return -1
 	}
-
-	// Ensure we have more than 32 bits in the accumulator to read from, if not,
-	// read more bytes from the buffer.
-	for bs.accuNumBits < 32 && bs.pos < int64(len(bs.buf)) {
-		bs.accuRegister |= uint64(bs.buf[bs.pos]) << bs.accuNumBits
-		bs.accuNumBits += 8
-		bs.pos++
-	}
-
-	return int32(bs.accuRegister & ((1 << n) - 1))
+	bs.checkAccumulator(n)
+	return int32(bs.accuRegister & ((uint64(1) << n) - 1))
 }
 
 func (bs *BitStreamReader) SkipBits(n uint8) {
-	if n == 0 || (bs.readBits+int64(n)) > bs.numBits {
+	if n == 0 || (bs.readBits+int32(n)) > bs.numBits {
 		return
 	}
 
-	// Ensure we have more than 32 bits in the accumulator to skip from, if not,
-	// read more bytes from the buffer.
-	for bs.accuNumBits < 32 && bs.pos < int64(len(bs.buf)) {
-		bs.accuRegister |= uint64(bs.buf[bs.pos]) << bs.accuNumBits
-		bs.accuNumBits += 8
-		bs.pos++
-	}
-
+	bs.checkAccumulator(n)
 	bs.accuRegister >>= n
-	bs.accuNumBits -= int32(n)
-	bs.readBits += int64(n)
+	bs.accuNumBits -= int16(n)
+	bs.readBits += int32(n)
 }
 
 func (bs *BitStreamReader) IsReadEnd(sizeofSymbolInBits uint8) bool {
-	return bs.readBits >= bs.numBits || (bs.numBits-bs.readBits) < int64(sizeofSymbolInBits)
+	return bs.readBits >= bs.numBits || (bs.numBits-bs.readBits) < int32(sizeofSymbolInBits)
 }

@@ -1,4 +1,4 @@
-package srlen
+package frameencoder
 
 import (
 	"strings"
@@ -119,7 +119,7 @@ func TestEncodeCompressesAndRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
-	encodedBits := encoded.Finalize()
+	encodedBits, _ := encoded.Finalize()
 
 	ratio := float64(encodedBits) / float64(rawBits)
 	t.Logf("raw=%d bits  encoded=%d bits  ratio=%.3f", rawBits, encodedBits, ratio)

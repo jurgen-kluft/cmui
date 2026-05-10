@@ -1,4 +1,4 @@
-package srlen
+package frameencoder
 
 import "fmt"
 
@@ -59,7 +59,7 @@ func (h *runHist) bestRb() uint8 {
 // Encode takes a stream of symbols and encodes it using the SRLEN algorithm.
 // User needs to provide the symbol size in bits and the alphabet size (number of distinct symbols), as
 // well as an output BitStreamWriter with enough capacity to hold the encoded data.
-func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, out *BitStreamWriter) (rb []uint8, err error) {
+func EncodePrepare(data *BitStreamReader, sizeofSymbolInBits uint8) (rb []uint8, err error) {
 	numberOfSymbols := int32(1 << sizeofSymbolInBits)
 	hists := make([]*runHist, numberOfSymbols)
 	for i := range numberOfSymbols {
@@ -96,7 +96,22 @@ func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, out *BitStreamWrite
 		rb[s] = hists[s].bestRb()
 	}
 
-	// Encode pass
+	return rb, nil
+}
+
+func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, givenRb []uint8, out *BitStreamWriter) (rb []uint8, err error) {
+	if givenRb == nil {
+		var err error
+		givenRb, err = EncodePrepare(data, sizeofSymbolInBits)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(givenRb) != (1 << sizeofSymbolInBits) {
+		return nil, fmt.Errorf("givenRb length %d does not match expected number of symbols %d", len(givenRb), 1<<sizeofSymbolInBits)
+	}
+
 	data.ResetRead()
 	for data.IsReadEnd(sizeofSymbolInBits) == false {
 		s := data.ReadBits(sizeofSymbolInBits)
@@ -106,37 +121,72 @@ func Encode(data *BitStreamReader, sizeofSymbolInBits uint8, out *BitStreamWrite
 			run++
 		}
 
-		if s == -1 || s >= int32(len(rb)) {
+		if s == -1 || s >= int32(len(givenRb)) {
 			return nil, fmt.Errorf("invalid symbol %d", s)
 		}
 
-		if rb[s] == 0 {
+		rb := givenRb[s]
+		if rb == 0 {
 			for k := 0; k < run; k++ {
 				out.WriteBits(uint32(s), sizeofSymbolInBits)
 			}
 		} else {
-			// How many runs can this symbol have with the chosen rb?
-			// For example:
-			//    rb == 1, then we can encode runs of length 1..2 with 1 bit
-			//    rb == 2, then we can encode runs of length 1..4 with 2 bits
-			//    rb == 4, then we can encode runs of length 1..16 with 4 bits
-			maxChunk := (1 << rb[s])
+			maxChunk := (1 << rb)
 			remain := run
 			for remain > 0 {
 				chunk := min(remain, maxChunk)
 				out.WriteBits(uint32(s), sizeofSymbolInBits)
-				out.WriteBits(uint32(chunk-1), rb[s])
+				out.WriteBits(uint32(chunk-1), rb)
 				remain -= chunk
 			}
 		}
 	}
 
-	return rb, nil
+	return givenRb, nil
 }
 
 // ============================================================
 // Decoder
 // ============================================================
+type SrlenBitStreamReader struct {
+	bs               *BitStreamReader
+	symbolSizeInBits uint8
+	rb               []uint8
+	symbol           int32
+	run              int32
+}
+
+func NewSrlenBitStreamReader(bs *BitStreamReader, symbolSizeInBits uint8, rb []uint8) *SrlenBitStreamReader {
+	return &SrlenBitStreamReader{
+		bs:               bs,
+		symbolSizeInBits: symbolSizeInBits,
+		rb:               rb,
+	}
+}
+
+func (s *SrlenBitStreamReader) BytePos() int32 {
+	return s.bs.CurrentBytePos()
+}
+
+func (s *SrlenBitStreamReader) ReadSymbol() (int32, error) {
+	if s.run > 0 {
+		s.run--
+		return s.symbol, nil
+	}
+
+	if s.bs.IsReadEnd(s.symbolSizeInBits) {
+		return -1, fmt.Errorf("end of stream")
+	}
+	sym := s.bs.ReadBits(s.symbolSizeInBits)
+	if sym == -1 || sym >= int32(len(s.rb)) {
+		return -1, fmt.Errorf("invalid symbol %d", sym)
+	}
+	s.symbol = sym
+	if s.rb[sym] > 0 {
+		s.run = s.bs.ReadBits(s.rb[sym])
+	}
+	return sym, nil
+}
 
 // Decode takes an encoded bit stream and decodes it using the SRLEN algorithm.
 // User needs to provide the symbol size in bits, the run bit lengths (rb) for each symbol,

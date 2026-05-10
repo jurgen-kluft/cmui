@@ -60,6 +60,24 @@ namespace ncore
             header.m_width      = width;
             header.m_height     = height;
             header.m_run_length = run_length;
+
+            header.m_p16_encoded_size         = 0;
+            header.m_p8_encoded_size          = 0;
+            header.m_p4_encoded_size          = 0;
+            header.m_p2_encoded_size          = 0;
+            header.m_selector_encoded_size    = 0;
+            header.m_run_change_encoded_size  = 0;
+            header.m_tile_change_encoded_size = 0;
+            header.m_line_change_encoded_size = 0;
+
+            header.m_p16_stream_decoded_units         = 0;
+            header.m_p8_stream_decoded_units          = 0;
+            header.m_p4_stream_decoded_units          = 0;
+            header.m_p2_stream_decoded_units          = 0;
+            header.m_selector_stream_decoded_units    = 0;
+            header.m_run_change_stream_decoded_units  = 0;
+            header.m_tile_change_stream_decoded_units = 0;
+            header.m_line_change_stream_decoded_units = 0;
         }
 
         static s8 s_histogram_cmp_fn(const void* a, const void* b, const void* user_data)
@@ -127,7 +145,7 @@ namespace ncore
 
             for (u32 y = 0; y < height; ++y)
             {
-                //u32 const* previous_img_row    = previous_img + y * width;
+                // u32 const* previous_img_row    = previous_img + y * width;
                 u32 const* current_img_row     = current_img + y * width;
                 u32 const* current_img_row_end = current_img_row + width;
                 while (current_img_row < current_img_row_end)

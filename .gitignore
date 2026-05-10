@@ -4,6 +4,7 @@
 
 target/
 tags/
+.idea
 
 #except the following files
 !.gitignore

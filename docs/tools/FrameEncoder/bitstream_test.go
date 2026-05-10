@@ -1,4 +1,4 @@
-package srlen
+package frameencoder
 
 import "testing"
 
@@ -29,7 +29,7 @@ func TestBitStreamWriterReader_RoundTripMixedWidths(t *testing.T) {
 	for _, e := range seq {
 		w.WriteBits(uint32(e.v), e.n)
 	}
-	bits := w.Finalize()
+	bits, _ := w.Finalize()
 
 	var expectedBits int64
 	for _, e := range seq {
@@ -107,11 +107,11 @@ func TestBitStreamWriterReader_ReadBounds(t *testing.T) {
 func TestBitStreamWriter_FinalizeLocksWriter(t *testing.T) {
 	w := NewBitStreamWriter(16)
 	w.WriteBits(0b11, 2)
-	before := w.Finalize()
+	before, _ := w.Finalize()
 
 	tail := w.buf[0]
 	w.WriteBits(0xFF, 8)
-	after := w.Finalize()
+	after, _ := w.Finalize()
 
 	if after != before {
 		t.Fatalf("Finalize should be stable after lock: got %d want %d", after, before)
@@ -201,7 +201,7 @@ func TestBitStreamWriter_DeterministicStress(t *testing.T) {
 	for _, e := range entries {
 		w.WriteBits(uint32(e.v), e.n)
 	}
-	got := w.Finalize()
+	got, _ := w.Finalize()
 	if got != totalBits {
 		t.Fatalf("Finalize: got %d bits, want %d", got, totalBits)
 	}

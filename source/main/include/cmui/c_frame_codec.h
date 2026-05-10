@@ -29,16 +29,18 @@ namespace ncore
             u32 m_p4_encoded_size;           // size of the encoded P4 stream in
             u32 m_p2_encoded_size;           // size of the encoded P2 stream in bytes
             u32 m_selector_encoded_size;     // size of the encoded selector stream in bytes
-            u32 m_line_change_encoded_size;  // size of the encoded line change stream in bytes
             u32 m_run_change_encoded_size;   // size of the encoded run change stream in bytes
+            u32 m_tile_change_encoded_size;  // size of the encoded tile change stream in bytes
+            u32 m_line_change_encoded_size;  // size of the encoded line change stream in bytes
 
             u32 m_p16_stream_decoded_units;          // size of the decoded P16 stream in units (unit = 16 bits)
             u32 m_p8_stream_decoded_units;           // size of the decoded P8 stream in units (unit = 8 bits)
             u32 m_p4_stream_decoded_units;           // size of the decoded P4 stream in units (unit = 4 bits)
             u32 m_p2_stream_decoded_units;           // size of the decoded P2 stream in units (unit = 2 bits)
             u32 m_selector_stream_decoded_units;     // size of the decoded selector stream in units (unit = 2 bits)
-            u32 m_line_change_stream_decoded_units;  // size of the decoded line change stream in units (unit = 2 bits)
             u32 m_run_change_stream_decoded_units;   // size of the decoded run change stream in units (unit = 1 bit)
+            u32 m_tile_change_stream_decoded_units;  // size of the decoded tile change stream in units (unit = 1 bit)
+            u32 m_line_change_stream_decoded_units;  // size of the decoded line change stream in units (unit = 2 bits)
         };
 
         void init_header(header_t& header, u16 width, u16 height, u16 run_length);
