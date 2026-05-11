@@ -1,40 +1,86 @@
 #include "ccore/c_target.h"
 #include "ccore/c_memory.h"
 
-#include "cmui/c_frame_decode.h"
 #include "cmui/c_frame_codec.h"
 
 namespace ncore
 {
     namespace nframe
     {
-        s32 decode_frame(header_t const& header, u8 const* in_data, u32 in_data_size, u16 const* current_img, u16* next_img)
-        {
-            // pseudo code for frame decoder
-            // for y < height:
-            //    line_change = read_symbol(&line_change_reader);
-            //    if (line_change == 1)
-            //       num_runs = (width + run-length - 1) / run-length
-            //       for run in num_runs:
-            //          x_begin = run * run-length
-            //          x_end   = min(x_begin + run-length, width)
-            //          run_change = read_symbol(&run_change_reader);
-            //          if (run_change == 1)
-            //             run_length = x_end - x_begin;
-            //             for r in run_length:
-            //                 selector = read_symbol(&selector_reader);
-            //                 switch selector:
-            //                    case P2: color = palette[read_symbol(&p2_reader)]; break;
-            //                    case P4: color = palette[4 + read_symbol(&p4_reader)]; break;
-            //                    case P8: color = palette[20 + read_symbol(&p8_reader)]; break;
-            //                    case P16: color = *p16_reader++; break;
-            //                 write color to current frame at (x_begin + r, y)
-            //          else
-            //             copy current run[x_begin,x_end) of previous frame to run[x_begin,x_end) of current frame
-            //    else
-            //       copy the current line from the previous frame to the current frame
+        static u16 s_span_line_buffer[128];
 
-            return -1;
+        void decode_line(frame_begin_t& frame, u16 span_width, u16 spans_per_line, frame_line_t const* line_msg, u16* out_psram_ptr)
+        {
+            // line data stream decoders
+            nsrle::decoder_t span_decoder = {0};
+            nsrle::decoder_t ps_decoder   = {0};
+            nsrle::decoder_t p2_decoder   = {0};
+            nsrle::decoder_t p4_decoder   = {0};
+            nsrle::decoder_t p8_decoder   = {0};
+            u16*             p16_data     = nullptr;
+            u16              p16_pos      = 0;
+
+            u16 const* stream_lengths = (u16 const*)((u8 const*)line_msg + sizeof(frame_line_t));
+            u8 const*  data_ptr       = (u8 const*)(stream_lengths + line_msg->m_num_streams);
+
+            i32 i = 0;
+            if (line_msg->m_flags & LF_STREAM_P16)
+            {
+                p16_data = (u16*)data_ptr;
+                data_ptr += stream_lengths[i++];
+            }
+            if (line_msg->m_flags & LF_STREAM_P8)
+            {
+                p8_decoder.m_stream = data_ptr;
+                data_ptr += stream_lengths[i++];
+            }
+            if (line_msg->m_flags & LF_STREAM_P4)
+            {
+                p4_decoder.m_stream = data_ptr;
+                data_ptr += stream_lengths[i++];
+            }
+            if (line_msg->m_flags & LF_STREAM_P2)
+            {
+                p2_decoder.m_stream = data_ptr;
+                data_ptr += stream_lengths[i++];
+            }
+            if (line_msg->m_flags & LF_STREAM_SELECTOR)
+            {
+                ps_decoder.m_stream = data_ptr;
+                data_ptr += stream_lengths[i++];
+            }
+            if (line_msg->m_flags & LF_STREAM_SPAN)
+            {
+                span_decoder.m_stream = data_ptr;
+                data_ptr += stream_lengths[i++];
+            }
+
+            // TODO, track contigues dirty spans and fill the s_span_line_buffer to
+            // minimize the number of memcpy calls to PSRAM, as they are expensive.
+            for (u16 s = 0; s < spans_per_line; s++)
+            {
+                const u8 dirty_span = nsrle::read_symbol(&span_decoder, frame.m_span_rb, 1);
+                if (dirty_span == 1)
+                {
+                    for (u16 x = 0; x < span_width; x++)
+                    {
+                        const u8 selector = nsrle::read_symbol(&ps_decoder, frame.m_ps_rb, 2);
+                        u16      color;
+                        switch (selector)
+                        {
+                            case SELECTOR_P2: color = frame.m_palette[nsrle::read_symbol(&p2_decoder, frame.m_p2_rb, 1)]; break;
+                            case SELECTOR_P4: color = frame.m_palette[4 + nsrle::read_symbol(&p4_decoder, frame.m_p4_rb, 2)]; break;
+                            case SELECTOR_P8: color = frame.m_palette[20 + nsrle::read_symbol(&p8_decoder, frame.m_p8_rb, 8)]; break;
+                            case SELECTOR_P16: color = p16_data[p16_pos++]; break;
+                        }
+                        s_span_line_buffer[x] = color;
+                    }
+
+                    // memcpy to PSRAM at the correct position for this span
+                    const u16 tile_x = s * span_width;
+                    g_memcpy(out_psram_ptr + tile_x, s_span_line_buffer, span_width * sizeof(u16));
+                }
+            }
         }
 
     }  // namespace nframe
