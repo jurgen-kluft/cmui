@@ -5,45 +5,83 @@
 #    pragma once
 #endif
 
+#include "cmui/c_srle.h"
+
 namespace ncore
 {
     namespace nframe
     {
-        struct header_t
+        struct frame_begin_t
         {
-            u16 m_magic;       // 'FE' in ASCII (0x4645), used to identify the encoded frame data
-            u16 m_width;       // Width of the image
-            u16 m_height;      // Height of the image
-            u16 m_run_length;  // Run length for run change stream
+            u16 m_msg_id;       // 'FB' in ASCII
+            u16 m_msg_len;      // Total length of this message, including this header, in bytes
+            u16 m_img_width;    // Width of the image
+            u16 m_img_height;   // Height of the image
+            u8  m_tile_width;   // Width of the image (span is the same size as tile width)
+            u8  m_tile_height;  // Height of the image
+            u16 m_tile_stride;  // Number of bytes per row of tiles (for tile line memory alignment)
 
             u8  m_p8_rb[256];         // SRLE run-bits for P8 stream
             u8  m_p4_rb[16];          // SRLE run-bits for P4 stream
             u8  m_p2_rb[4];           // SRLE run-bits for P2 stream
-            u8  m_selector_rb[4];     // SRLE run-bits for each symbol
+            u8  m_ps_rb[4];           // SRLE run-bits for pixel selector stream
+            u8  m_span_change_rb[2];  // SRLE run-bits for span change stream
             u8  m_line_change_rb[2];  // SRLE run-bits for line change stream
-            u8  m_run_change_rb[2];   // SRLE run-bits for run change stream
             u16 m_palette[276];       // RGB565 palette (4 colors for P2, 16 colors for P4, 256 colors for P8)
-
-            u32 m_p16_encoded_size;          // size of the encoded P16 stream in bytes
-            u32 m_p8_encoded_size;           // size of the encoded P8 stream in bytes
-            u32 m_p4_encoded_size;           // size of the encoded P4 stream in
-            u32 m_p2_encoded_size;           // size of the encoded P2 stream in bytes
-            u32 m_selector_encoded_size;     // size of the encoded selector stream in bytes
-            u32 m_run_change_encoded_size;   // size of the encoded run change stream in bytes
-            u32 m_tile_change_encoded_size;  // size of the encoded tile change stream in bytes
-            u32 m_line_change_encoded_size;  // size of the encoded line change stream in bytes
-
-            u32 m_p16_stream_decoded_units;          // size of the decoded P16 stream in units (unit = 16 bits)
-            u32 m_p8_stream_decoded_units;           // size of the decoded P8 stream in units (unit = 8 bits)
-            u32 m_p4_stream_decoded_units;           // size of the decoded P4 stream in units (unit = 4 bits)
-            u32 m_p2_stream_decoded_units;           // size of the decoded P2 stream in units (unit = 2 bits)
-            u32 m_selector_stream_decoded_units;     // size of the decoded selector stream in units (unit = 2 bits)
-            u32 m_run_change_stream_decoded_units;   // size of the decoded run change stream in units (unit = 1 bit)
-            u32 m_tile_change_stream_decoded_units;  // size of the decoded tile change stream in units (unit = 1 bit)
-            u32 m_line_change_stream_decoded_units;  // size of the decoded line change stream in units (unit = 2 bits)
+            // u8 m_tile_change_data[];  // the (non-encoded) tile change data
         };
 
-        void init_header(header_t& header, u16 width, u16 height, u16 run_length);
+        void init_frame_begin(frame_begin_t& f, u16 img_width, u16 img_height, u16 tile_width, u16 tile_height);
+
+        struct frame_end_t
+        {
+            u16 m_msg_id;   // 'FE' in ASCII
+            u16 m_msg_len;  // Total length of the encoded frame data, including this header, in bytes
+        };
+
+        struct frame_context_t
+        {
+            u16 m_img_width;    // Width of the image
+            u16 m_img_height;   // Height of the image
+            u8  m_tile_width;   // Width of the image (span is the same size as tile width)
+            u8  m_tile_height;  // Height of the image
+
+            u8* m_changed_tiles;  // A 2D grid (width, height) of bits that indicate which tile has changed
+
+            // line data stream decoders
+            nsrle::decoder_t m_span_decoder;
+            nsrle::decoder_t m_ps_decoder;  // pixel selector decoder
+            nsrle::decoder_t m_p2_decoder;
+            nsrle::decoder_t m_p4_decoder;
+            nsrle::decoder_t m_p8_decoder;
+            u16*             m_p16_data;
+            u16              m_p16_data_pos;
+        };
+
+        void init_frame_context(frame_context_t& ctx, frame_begin_t const& frame_begin);
+
+        enum frame_line_flags_e
+        {
+            LF_STREAM_SPAN     = 1,
+            LF_STREAM_SELECTOR = 2,
+            LF_STREAM_P2       = 4,
+            LF_STREAM_P4       = 8,
+            LF_STREAM_P8       = 16,
+            LF_STREAM_P16      = 32,
+        };
+
+        struct frame_line_t
+        {
+            u16 m_msg_id;   // 'FL' in ASCII
+            u16 m_msg_len;  // Total length of the encoded frame data, including this header, in bytes
+            u16 m_index;    // line index in the image (y)
+            u16 m_flags;    // flags(line_flags_e)
+            // u16 m_stream_len[]; // depending on the flags, the length of each stream data in bytes, in the order of span, selector, p2, p4, p8, p16
+            // u8  m_stream_data[]; // data stream for this line, the order of each stream data is span, selector, p2, p4, p8, p16, and the length of each stream data is determined by the flags and the corresponding m_stream_len value
+            // alignment to 4 bytes
+        };
+
+        void decode_line(frame_context_t& ctx, frame_line_t const* line_msg, u16* out_psram_ptr);
 
         enum selector_e
         {

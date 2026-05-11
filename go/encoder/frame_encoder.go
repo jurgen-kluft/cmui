@@ -137,7 +137,7 @@ func PrintImageInfo(histogram []histocolor, w int, h int) {
 type LineInfo struct {
 	Active                bool
 	LineIndex             uint16
-	GlobalSpanStream      *BitStreamWriter
+	SpanStream            *BitStreamWriter
 	SelectorStream        *BitStreamWriter
 	P2Stream              *BitStreamWriter
 	P4Stream              *BitStreamWriter
@@ -153,7 +153,7 @@ type LineInfo struct {
 func (l *LineInfo) Initialize(y uint16, w int) {
 	l.Active = true
 	l.LineIndex = uint16(y)
-	l.GlobalSpanStream = NewBitStreamWriter(int64(w))
+	l.SpanStream = NewBitStreamWriter(int64(w))
 	l.SelectorStream = NewBitStreamWriter(int64(w * 2))
 	l.P2Stream = NewBitStreamWriter(int64(w * 2))
 	l.P4Stream = NewBitStreamWriter(int64(w * 4))
@@ -285,7 +285,7 @@ func EncodeFrame(imageWidth, imageHeight, tileWidth, tileHeight int, curImage []
 			for tx := 0; tx < w; tx += tileWidth {
 				spanHasChanged := curSpanChanged[tx>>tileWidthShift]
 				globalSpanStream.WriteBits(uint32(spanHasChanged), 1)
-				lineInfos[ty].GlobalSpanStream.WriteBits(uint32(spanHasChanged), 1)
+				lineInfos[ty].SpanStream.WriteBits(uint32(spanHasChanged), 1)
 
 				// The span has changes, so we need to write pixels
 				if spanHasChanged == 1 {
@@ -365,7 +365,7 @@ func EncodeFrame(imageWidth, imageHeight, tileWidth, tileHeight int, curImage []
 
 	for ty := 0; ty < h; ty += 1 {
 		if lineInfos[ty].Active {
-			_, spanStreamNumBytes := lineInfos[ty].GlobalSpanStream.Finalize()
+			_, spanStreamNumBytes := lineInfos[ty].SpanStream.Finalize()
 			_, selectorStreamNumBytes := lineInfos[ty].SelectorStream.Finalize()
 			_, p2StreamNumBytes := lineInfos[ty].P2Stream.Finalize()
 			_, p4StreamNumBytes := lineInfos[ty].P4Stream.Finalize()
@@ -377,7 +377,7 @@ func EncodeFrame(imageWidth, imageHeight, tileWidth, tileHeight int, curImage []
 			lineBasedP4StreamNumBytes += int(p4StreamNumBytes)
 			lineBasedP8StreamNumBytes += int(p8StreamNumBytes)
 
-			_, err := Encode(lineInfos[ty].GlobalSpanStream.Reader(), 1, globalSpanStreamRb, lineInfos[ty].SpanStreamEncoded)
+			_, err := Encode(lineInfos[ty].SpanStream.Reader(), 1, globalSpanStreamRb, lineInfos[ty].SpanStreamEncoded)
 			if err != nil {
 				fmt.Printf("ERROR: failed to encode span stream for line %d: %v\n", ty, err)
 				return

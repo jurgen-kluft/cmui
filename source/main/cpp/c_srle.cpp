@@ -7,7 +7,7 @@
 
 namespace ncore
 {
-    namespace nrle
+    namespace nsrle
     {
         // bitstream format:
         //  - u32      decoded_size_in_bits;  // size of the decoded bitstream in bits
@@ -15,7 +15,7 @@ namespace ncore
         //  - u8       run_bits[];            // array of run-bits per symbols (size = 2^symbol_bits)
         //  - u8       encoded_data[];        // the encoded bitstream data
 
-        s32 analyze_bits(encoder_t* enc, const u8* data, u32 data_bits, u8 symbol_bits)
+        s32 analyze_bits(const u8* data, u32 data_bits, u8 symbol_bits, u8* rb_table, syminfo_t* analysis)
         {
             // only allowed symbol_bits; 1, 2, 4 or 8
             if (symbol_bits != 1 && symbol_bits != 2 && symbol_bits != 4 && symbol_bits != 8)
@@ -26,14 +26,11 @@ namespace ncore
             // (size in bits for each rb) during the analysis phase, and then we will write
             // the header and encoded data to the same buffer after we have determined the
             // optimal run_bits for each symbol.
-            enc->m_data                    = data;
-            enc->m_data_bits               = data_bits;
-            enc->m_symbol_bits             = symbol_bits;
-            encoder_t::info_t* symbol_info = enc->m_symbol_info;
+            syminfo_t* symbol_info = analysis;
 
             // Initialize the symbol info
             const u32 num_symbols      = 1U << symbol_bits;
-            const u32 symbol_info_size = sizeof(encoder_t::info_t) * num_symbols;
+            const u32 symbol_info_size = sizeof(syminfo_t) * num_symbols;
             g_memclr(symbol_info, symbol_info_size);
 
             nbitstream::reader_t bitreader;
@@ -56,7 +53,7 @@ namespace ncore
 
                 // here for each rb we calculate the size of the encoding and add to
                 // the total size for that rb
-                encoder_t::info_t& info = symbol_info[symbol];
+                syminfo_t& info = symbol_info[symbol];
                 info.m_units[0] += count;
                 info.m_units[1] += (count + 1) >> 1;
                 info.m_units[2] += (count + 3) >> 2;
@@ -84,36 +81,26 @@ namespace ncore
                         best_size_in_bits = size_in_bits;
                     }
                 }
-                enc->m_symbol_rb[symbol] = best_rb;
+                rb_table[symbol] = best_rb;
                 final_decoded_size_in_bits += best_size_in_bits;
             }
-
-            enc->m_encoded_size_in_bits = final_decoded_size_in_bits;
 
             // return the size of the encoded bitstream in bytes (rounded up)
             return (s32)((final_decoded_size_in_bits + 7) >> 3);
         }
 
-        s32 encode_bits(encoder_t const* enc, header_t& out_header, out_t& out_encoded)
+        s32 encode_bits(const u8* data, u32 data_bits, u8 symbol_bits, const u8* rb_table, out_t& out_encoded)
         {
-            const u32 symbol_bits = enc->m_symbol_bits;
             const u32 num_symbols = 1U << symbol_bits;
-
-            out_header.m_decoded_size_in_units = enc->m_data_bits / symbol_bits;  // size of the decoded bitstream in units
-            out_header.m_symbol_bits          = symbol_bits;
-            for (u32 symbol = 0; symbol < 256; ++symbol)
-                out_header.m_run_bits[symbol] = 0;
-            for (u32 symbol = 0; symbol < num_symbols; ++symbol)
-                out_header.m_run_bits[symbol] = enc->m_symbol_rb[symbol];
 
             // Now we have the optimal rb for each symbol, we can encode the bitstream accordingly.
             nbitstream::reader_t bitreader;
-            nbitstream::init(&bitreader, enc->m_data, enc->m_data_bits);
+            nbitstream::init(&bitreader, data, data_bits);
 
             nbitstream::writer_t bitwriter;
             nbitstream::init(&bitwriter, out_encoded.m_data, out_encoded.m_size * 8);
 
-            u32 num_reads = enc->m_data_bits / symbol_bits;
+            u32 num_reads = data_bits / symbol_bits;
             while (num_reads > 0)
             {
                 const u32 symbol = nbitstream::read_bits_unguarded(&bitreader, symbol_bits);
@@ -129,7 +116,7 @@ namespace ncore
                 }
                 count = count - num_reads;
 
-                const u8 rb = out_header.m_run_bits[symbol];
+                const u8 rb = rb_table[symbol];
                 if (rb == 0)
                 {
                     // raw mode, just write the symbols sequentially without RLE encoding
@@ -159,52 +146,34 @@ namespace ncore
             return (s32)(total_bits);
         }
 
-        s32 decoder_init(decoder_t& decoder, const header_t* hdr, const u8* encoded_bitstream)
+        s32 decode_all(decoder_t& decoder, const u8* symbol_rb, u32 symbol_bits, u32 decoded_size_in_bits, out_t& out)
         {
-            if (hdr->m_symbol_bits != 1 && hdr->m_symbol_bits != 2 && hdr->m_symbol_bits != 4 && hdr->m_symbol_bits != 8)
-                return -1;  // invalid symbol_bits
-
-            decoder.m_header = hdr;
-            decoder.m_symbol = 0;
-            decoder.m_rl     = 0;
-
-            const u32 decoded_size_in_bits = decoded_size(hdr);
-            nbitstream::init(&decoder.m_bitstream, encoded_bitstream, decoded_size_in_bits);
-            return 0;
-        }
-
-        s32 decode_all(decoder_t& decoder, out_t& out)
-        {
-            const header_t* hdr = decoder.m_header;
-
             nbitstream::writer_t bitwriter;
             nbitstream::init(&bitwriter, out.m_data, out.m_size * 8);
 
-            const u64 decoded_size_in_bits = decoded_size(hdr);
-
             while (bitwriter.num_bits < decoded_size_in_bits)
             {
-                const u32 symbol = nbitstream::read_bits_unguarded(&decoder.m_bitstream, hdr->m_symbol_bits);
-                if (symbol >= (1U << hdr->m_symbol_bits))
+                const u32 symbol = read_symbol(&decoder, decoder.m_stream, symbol_bits);
+                if (symbol >= (1U << symbol_bits))
                     return -1;  // invalid symbol
 
-                const u8 rb = hdr->m_run_bits[symbol];
+                const u8 rb = symbol_rb[symbol];
                 if (rb == 0)
                 {
-                    if ((bitwriter.num_bits + hdr->m_symbol_bits) > decoded_size_in_bits)
+                    if ((bitwriter.num_bits + symbol_bits) > decoded_size_in_bits)
                         return -1;  // malformed stream
 
                     // raw mode, just write one symbol
-                    if (nbitstream::write_bits(&bitwriter, symbol, hdr->m_symbol_bits) < 0)
+                    if (nbitstream::write_bits(&bitwriter, symbol, symbol_bits) < 0)
                         return -1;  // error writing bits
                 }
                 else
                 {
-                    const u32 chunk = nbitstream::read_bits_unguarded(&decoder.m_bitstream, rb) + 1;
-                    const u32 remaining_symbols = (decoded_size_in_bits - bitwriter.num_bits) / hdr->m_symbol_bits;
+                    const u32 chunk = read_bits(&decoder, rb) + 1;
+                    const u32 remaining_symbols = (decoded_size_in_bits - bitwriter.num_bits) / symbol_bits;
                     if (chunk > remaining_symbols)
                         return -1;  // malformed stream
-                    if (nbitstream::write_bits_repeat(&bitwriter, symbol, hdr->m_symbol_bits, chunk) < 0)
+                    if (nbitstream::write_bits_repeat(&bitwriter, symbol, symbol_bits, chunk) < 0)
                         return -1;  // error writing bits
                 }
             }

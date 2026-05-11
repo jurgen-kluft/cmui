@@ -18,7 +18,7 @@ namespace ncore
             u16 m_palette[276];            // RGB565 palette
         };
 
-        s32 encode_frame(encoder_t& encoder, header_t& out_hdr, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 run_length = 8);
+        s32 encode_frame(encoder_t& encoder, frame_begin_t* out_begin, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 tile_size = 16);
 
     }  // namespace nframe
 }  // namespace ncore
