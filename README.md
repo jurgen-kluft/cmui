@@ -6,13 +6,15 @@ Remote UI Server for ESP32 microcontrollers, running a software 2D renderer. The
 
 Communication between the server and clients is done using TCP, sending small packets containing the compressed framebuffer data. The clients are responsible for decompressing the data and rendering it on their displays.
 
-[ ] Load UI description, `UI.json`
-[ ] Loading necessary paks
-[ ] Client-Server
-[ ] Communication Protocol (TCP)
-[x] 2D Rendering (lines, rectangles, circles, sprites)
-[ ] Font Rendering
-[x] Frame Compression
+Steps:
+
+- [ ] Load UI description, `UI.json`
+- [ ] Loading necessary paks
+- [ ] Client-Server
+- [ ] Communication Protocol (TCP)
+- [x] 2D Rendering (lines, rectangles, circles, sprites)
+- [ ] Font Rendering
+- [x] Frame Compression
 
 ## Features
 
