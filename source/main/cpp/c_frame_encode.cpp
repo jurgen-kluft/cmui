@@ -33,51 +33,37 @@ namespace ncore
         // 4. Line change stream size = (height / 8) bits
         // 5. Compare image to previous image to build all the streams
 
-        void init_header(header_t& header, u16 width, u16 height, u16 run_length)
+        void init_frame_begin(frame_begin_t& f, u16 img_width, u16 img_height, u16 tile_size)
         {
+            f.m_msg_id  = 0x4642;  // 'FB' in ASCII
+            f.m_msg_len = 0;
+
             for (i32 i = 0; i < 4; ++i)
-                header.m_selector_rb[i] = 0;
+                f.m_ps_rb[i] = 0;
 
             for (i32 i = 0; i < 2; ++i)
             {
-                header.m_line_change_rb[i] = 0;
-                header.m_run_change_rb[i]  = 0;
+                f.m_line_change_rb[i] = 0;
+                f.m_span_change_rb[i] = 0;
             }
 
             for (i32 i = 0; i < 4; ++i)
-                header.m_p2_rb[i] = 0;
+                f.m_p2_rb[i] = 0;
 
             for (i32 i = 0; i < 16; ++i)
-                header.m_p4_rb[i] = 0;
+                f.m_p4_rb[i] = 0;
 
             for (i32 i = 0; i < 256; ++i)
-                header.m_p8_rb[i] = 0;
+                f.m_p8_rb[i] = 0;
 
             for (i32 i = 0; i < 276; ++i)
-                header.m_palette[i] = 0;
+                f.m_palette[i] = 0;
 
             // Set width, height, and run length in the header
-            header.m_width      = width;
-            header.m_height     = height;
-            header.m_run_length = run_length;
-
-            header.m_p16_encoded_size         = 0;
-            header.m_p8_encoded_size          = 0;
-            header.m_p4_encoded_size          = 0;
-            header.m_p2_encoded_size          = 0;
-            header.m_selector_encoded_size    = 0;
-            header.m_run_change_encoded_size  = 0;
-            header.m_tile_change_encoded_size = 0;
-            header.m_line_change_encoded_size = 0;
-
-            header.m_p16_stream_decoded_units         = 0;
-            header.m_p8_stream_decoded_units          = 0;
-            header.m_p4_stream_decoded_units          = 0;
-            header.m_p2_stream_decoded_units          = 0;
-            header.m_selector_stream_decoded_units    = 0;
-            header.m_run_change_stream_decoded_units  = 0;
-            header.m_tile_change_stream_decoded_units = 0;
-            header.m_line_change_stream_decoded_units = 0;
+            f.m_img_width   = img_width;
+            f.m_img_height  = img_height;
+            f.m_tile_width  = tile_size;
+            f.m_tile_height = tile_size;
         }
 
         static s8 s_histogram_cmp_fn(const void* a, const void* b, const void* user_data)
@@ -97,45 +83,28 @@ namespace ncore
         static inline u32 s_units_to_bytes(u32 units, u32 bits_per_unit) { return ((units * bits_per_unit) + 7) >> 3; }
         static inline u16 s_rgba888_to_rgb565(u32 rgba) { return ((rgba >> 8) & 0xf800) | ((rgba >> 5) & 0x07e0) | ((rgba >> 3) & 0x001f); }
 
-        static s32 s_compress(nrle::encoder_t& encoder, u8 const* stream, u32 stream_size_in_bits, u8 symbol_bits, u8* out_stream, u8* out_symbol_rb)
+        static s32 s_compress(const u8* stream, u32 stream_size_in_bits, u8 symbol_bits, u8* out_stream, u8* out_symbol_rb)
         {
             // size in bytes of the encoded stream, or a negative value on error
-            const s32 encoded_size = nrle::analyze_bits(&encoder, stream, stream_size_in_bits, symbol_bits);
+            nsrle::syminfo_t* syminfo_array = nullptr;
+            const s32         encoded_size  = nsrle::analyze_bits(stream, stream_size_in_bits, symbol_bits, out_symbol_rb, syminfo_array);
 
-            nrle::out_t out_stream_info;
+            nsrle::out_t out_stream_info;
             out_stream_info.m_data = out_stream;
             out_stream_info.m_size = (stream_size_in_bits + 7) >> 3;  // We use the uncompressed size as the upper bound for the compressed size
 
             ASSERT(stream_size_in_bits <= (u32)(encoded_size * 8));  // Compression should not increase the size
 
-            nrle::header_t srle_header;
-            const s32      encoded_num_bits = nrle::encode_bits(&encoder, srle_header, out_stream_info);
+            const s32 encoded_num_bits = nsrle::encode_bits(stream, stream_size_in_bits, symbol_bits, out_symbol_rb, out_stream_info);
 
             ASSERT(encoded_num_bits == encoded_size * 8);  // The encoded size in bits should match the size calculated during analysis
-
-            for (i32 i = 0; i < (1 << symbol_bits); ++i)
-                out_symbol_rb[i] = srle_header.m_run_bits[i];
 
             return encoded_size;
         }
 
-        s32 move_data16(u16 const* stream, u32 count, u16* out_stream)
+        s32 encode_frame(encoder_t& encoder, frame_begin_t* out_begin, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 tile_size)
         {
-            // return number of bytes
-            return -1;
-        }
-
-        s32 encode_frame(encoder_t& encoder, header_t& out_hdr, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 run_length)
-        {
-            // Initialize header
-            out_hdr.m_magic      = 0x4645;  // 'FE' in ASCII
-            out_hdr.m_width      = width;
-            out_hdr.m_height     = height;
-            out_hdr.m_run_length = run_length;
-
             // Initialize histogram and palette
-
-            g_memory_fill(encoder.m_palette, 0, sizeof(encoder.m_palette));
             g_memory_fill(encoder.m_histogram_count, 0, sizeof(encoder.m_histogram_count));
 
             for (u32 i = 0; i < 65536; ++i)
@@ -161,7 +130,7 @@ namespace ncore
             for (u32 i = 0; i < 276; ++i)
             {
                 u16 const color      = encoder.m_histogram_color[i];
-                encoder.m_palette[i] = color;
+                out_begin->m_palette[i] = color;
                 if (encoder.m_histogram_count[color] == 0)
                     break;  // No more colors in the image
             }
@@ -204,7 +173,7 @@ namespace ncore
             const u32 p2_stream_size_in_units          = p2_pixel_count;                                    // 2 bits per pixel
             const u32 selector_stream_size_in_units    = total_pixel_count;                                 // 2 bits per pixel (SELECTOR_RAW)
             const u32 line_change_stream_size_in_units = height;                                            // 1 bit per line, rounded up to the nearest byte
-            const u32 run_change_stream_size_in_units  = ((width + run_length - 1) / run_length) * height;  // 1 bit per run, rounded up to the nearest byte
+            const u32 run_change_stream_size_in_units  = ((width + tile_size - 1) / tile_size) * height;  // 1 bit per run, rounded up to the nearest byte
 
             // Which one of the compressing streams is the largest, we will use this to introduce a gap into
             // the output buffer here, so that once we start compressing we can make sure we are not overwriting
@@ -241,21 +210,15 @@ namespace ncore
             // Clear all stream buffers so trailing alignment bits are deterministic.
             g_memory_fill(p2_stream_ptr, 0, (u32)(out_data_end - p2_stream_ptr));
 
-            // Initialize header
-            init_header(out_hdr, width, height, run_length);
-
-            // Copy palette to header for decoding.
-            for (u32 i = 0; i < 276; ++i)
-                out_hdr.m_palette[i] = encoder.m_palette[i];
-
             // Build RGB565 -> palette index map: 0..275 for palette entries, -1 for raw.
             for (u32 i = 0; i < 65536; ++i)
                 encoder.m_histogram_color[i] = -1;
+
             for (u32 i = 0; i < 276; ++i)
             {
-                if (encoder.m_histogram_count[encoder.m_palette[i]] == 0)
+                if (encoder.m_histogram_count[out_begin->m_palette[i]] == 0)
                     break;
-                encoder.m_histogram_color[encoder.m_palette[i]] = (i16)i;
+                encoder.m_histogram_color[out_begin->m_palette[i]] = (i16)i;
             }
 
             nbitstream::writer_t p16_writer;
@@ -277,7 +240,7 @@ namespace ncore
             // Now that we have everything set up, we can start encoding the image by comparing it to the
             // previous image and filling the streams accordingly.
 
-            const u32 run_count_per_line = (width + run_length - 1) / run_length;
+            const u32 span_count_per_line = (width + tile_size - 1) / tile_size;
             for (u32 y = 0; y < height; ++y)
             {
                 u32 const* current_img_row  = current_img + y * width;
@@ -285,10 +248,10 @@ namespace ncore
 
                 bool line_changed = false;
 
-                for (u32 run = 0; run < run_count_per_line; ++run)
+                for (u32 run = 0; run < span_count_per_line; ++run)
                 {
-                    const u32 x0 = run * run_length;
-                    const u32 x1 = (x0 + run_length) < width ? (x0 + run_length) : width;
+                    const u32 x0 = run * tile_size;
+                    const u32 x1 = (x0 + tile_size) < width ? (x0 + tile_size) : width;
 
                     bool run_changed = false;
                     for (u32 x = x0; x < x1 && !run_changed; ++x)
@@ -358,41 +321,22 @@ namespace ncore
             // Some of the stream we are going to apply SRLE to it and this will result in all of the streams either
             // being the same size or smaller.
             // So we will start to re-compute the location of all the streams one by one.
-            nrle::encoder_t srle_encoder;
-
             u8* p16_stream_ptr_srle          = out_data;
             u32 p16_stream_srle_size         = p16_units;  // p16 already exists here and we are not compressing it
             u8* p8_stream_ptr_srle           = p16_stream_ptr_srle + p16_stream_srle_size;
-            u32 p8_stream_srle_size          = s_compress(srle_encoder, p8_stream_ptr, p8_units, 8, p8_stream_ptr_srle, out_hdr.m_p8_rb);
+            u32 p8_stream_srle_size          = s_compress(p8_stream_ptr, p8_units*8, 8, p8_stream_ptr_srle, out_begin->m_p8_rb);
             u8* p4_stream_ptr_srle           = p8_stream_ptr_srle + p8_stream_srle_size;
-            u32 p4_stream_srle_size          = s_compress(srle_encoder, p4_stream_ptr, p4_units, 4, p4_stream_ptr_srle, out_hdr.m_p4_rb);
+            u32 p4_stream_srle_size          = s_compress( p4_stream_ptr, p4_units*4, 4, p4_stream_ptr_srle, out_begin->m_p4_rb);
             u8* p2_stream_ptr_srle           = p4_stream_ptr_srle + p4_stream_srle_size;
-            u32 p2_stream_srle_size          = s_compress(srle_encoder, p2_stream_ptr, p2_units, 2, p2_stream_ptr_srle, out_hdr.m_p2_rb);
+            u32 p2_stream_srle_size          = s_compress( p2_stream_ptr, p2_units*2, 2, p2_stream_ptr_srle, out_begin->m_p2_rb);
             u8* selector_stream_ptr_srle     = p2_stream_ptr_srle + p2_stream_srle_size;
-            u32 selector_stream_srle_size    = s_compress(srle_encoder, selector_stream_ptr, selector_units, 2, selector_stream_ptr_srle, out_hdr.m_selector_rb);
+            u32 selector_stream_srle_size    = s_compress( selector_stream_ptr, selector_units, 2, selector_stream_ptr_srle, out_begin->m_ps_rb);
             u8* line_change_stream_ptr_srle  = selector_stream_ptr_srle + selector_stream_srle_size;
-            u32 line_change_stream_srle_size = s_compress(srle_encoder, line_change_stream_ptr, line_change_units, 2, line_change_stream_ptr_srle, out_hdr.m_line_change_rb);
+            u32 line_change_stream_srle_size = s_compress( line_change_stream_ptr, line_change_units, 2, line_change_stream_ptr_srle, out_begin->m_line_change_rb);
             u8* run_change_stream_ptr_srle   = line_change_stream_ptr_srle + line_change_stream_srle_size;
-            u32 run_change_stream_srle_size  = s_compress(srle_encoder, run_change_stream_ptr, run_change_units, 1, run_change_stream_ptr_srle, out_hdr.m_run_change_rb);
+            u32 run_change_stream_srle_size  = s_compress( run_change_stream_ptr, run_change_units, 1, run_change_stream_ptr_srle, out_begin->m_span_change_rb);
 
             const u32 encoded_size = p16_stream_srle_size + p8_stream_srle_size + p4_stream_srle_size + p2_stream_srle_size + selector_stream_srle_size + line_change_stream_srle_size + run_change_stream_srle_size;
-
-            // Fill in the header
-            out_hdr.m_p16_encoded_size         = p16_stream_srle_size;
-            out_hdr.m_p8_encoded_size          = p8_stream_srle_size;
-            out_hdr.m_p4_encoded_size          = p4_stream_srle_size;
-            out_hdr.m_p2_encoded_size          = p2_stream_srle_size;
-            out_hdr.m_selector_encoded_size    = selector_stream_srle_size;
-            out_hdr.m_line_change_encoded_size = line_change_stream_srle_size;
-            out_hdr.m_run_change_encoded_size  = run_change_stream_srle_size;
-
-            out_hdr.m_p16_stream_decoded_units         = p16_units;
-            out_hdr.m_p8_stream_decoded_units          = p8_units;
-            out_hdr.m_p4_stream_decoded_units          = p4_units;
-            out_hdr.m_p2_stream_decoded_units          = p2_units;
-            out_hdr.m_selector_stream_decoded_units    = selector_units;
-            out_hdr.m_line_change_stream_decoded_units = line_change_units;
-            out_hdr.m_run_change_stream_decoded_units  = run_change_units;
 
             return encoded_size <= out_data_capacity ? (s32)encoded_size : -1;
         }

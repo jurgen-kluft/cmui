@@ -31,7 +31,7 @@ namespace ncore
             // u8 m_tile_change_data[];  // the (non-encoded) tile change data
         };
 
-        void init_frame_begin(frame_begin_t& f, u16 img_width, u16 img_height, u16 tile_width, u16 tile_height);
+        void init_frame_begin(frame_begin_t& f, u16 img_width, u16 img_height, u16 tile_size);
 
         struct frame_end_t
         {
