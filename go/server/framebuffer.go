@@ -1,4 +1,4 @@
-package mui
+package remote_ui_server
 
 type FrameBuffer struct {
 	Width  int
