@@ -1,5 +1,10 @@
 package remote_ui_server
 
+import (
+	fontpack "github.com/jurgen-kluft/go-gx2/fontpak"
+	spritepack "github.com/jurgen-kluft/go-gx2/spritepak"
+)
+
 type ClientInfo struct {
 	DeviceType   uint16 // 0=unknown, 1=phone, 2=tablet, 3=desktop
 	ScreenWidth  uint16 // in pixels
@@ -8,7 +13,7 @@ type ClientInfo struct {
 }
 
 type UserInterface interface {
-	Initialize(spritePack *SpritePack, fontPack *FontPack)
+	Initialize(spritePack *spritepack.SpritePack, fontPack *fontpack.FontPack)
 
 	OnClientInfo(info ClientInfo)
 
