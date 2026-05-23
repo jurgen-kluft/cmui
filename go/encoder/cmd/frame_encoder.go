@@ -6,7 +6,7 @@ import (
 	"image/png"
 	"os"
 
-	fe "github.com/jurgen-kluft/cmui/docs/tools/FrameEncoder"
+	fe "github.com/jurgen-kluft/cmui/go/encoder"
 )
 
 const (
