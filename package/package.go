@@ -1,10 +1,10 @@
 package cmui
 
 import (
-	denv "github.com/jurgen-kluft/ccode/denv"
 	ccore "github.com/jurgen-kluft/ccore/package"
 	cgx2 "github.com/jurgen-kluft/cgx2/package"
 	cunittest "github.com/jurgen-kluft/cunittest/package"
+	denv "github.com/jurgen-kluft/gide/denv"
 )
 
 const (
